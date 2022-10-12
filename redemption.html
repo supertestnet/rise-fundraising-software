@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+    <script src="https://bitcoincore.tech/apps/bitcoinjs-ui/lib/bitcoinjs-lib.js"></script>
+    <script src="https://bundle.run/noble-secp256k1@1.2.14"></script>
+    <script src="https://bundle.run/browserify-cipher@1.0.1"></script>
+    <script src="https://bundle.run/buffer@6.0.3"></script>
+    <script src="https://bundle.run/varuint-bitcoin@1.1.2"></script>
+    <script src="https://supertestnet.github.io/bitcoin-chess/js/qrcode.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-size: 1.15em;
+            font-family: Arial, sans-serif;
+        }
+        html {
+            max-width: 70ch;
+            padding: 3em 1em;
+            margin: auto;
+            line-height: 1.25;
+        }
+        h1 {
+            font-size: 2em;
+        }
+        h2 {
+            font-size: 1.5em;
+        }
+        input {
+            width: 100%;
+            height: 1.8em;
+            border: 1px solid grey;
+        }
+        #black-bg {
+            display: none;
+            width: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background-color: #000;
+            opacity: .5;
+            width: 100vw;
+            height: 100vh;
+        }
+        #modal{
+            display: none;
+            position: fixed;
+            box-sizing: border-box;
+            top: 50%;
+            left: 50%;
+            transform: translate( -50%, -50% );
+            width: 100%;
+            max-width: 560px;
+            background-color: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            color: #000;
+            text-align: center;
+        }
+        .box {
+             font-size: 1.25rem;
+            /* 20 */
+             background-color: #c8dadf;
+             position: relative;
+             padding: 100px 20px;
+        }
+         .box.has-advanced-upload {
+             outline: 2px dashed #92b0b3;
+             outline-offset: -10px;
+             -webkit-transition: outline-offset .15s ease-in-out, background-color .15s linear;
+             transition: outline-offset .15s ease-in-out, background-color .15s linear;
+        }
+         .box.is-dragover {
+             outline-offset: -20px;
+             outline-color: #c8dadf;
+             background-color: #fff;
+        }
+         .box__dragndrop, .box__icon {
+             display: none;
+             cursor: pointer;
+        }
+         .box.has-advanced-upload .box__dragndrop {
+             display: inline;
+        }
+         .box.has-advanced-upload .box__icon {
+             width: 100%;
+             height: 80px;
+             fill: #92b0b3;
+             display: block;
+             margin-bottom: 40px;
+        }
+         .box.has-advanced-upload .box__icon:hover, .box__icon:hover {
+             fill: blue;
+        }
+         .box.is-uploading .box__input, .box.is-success .box__input, .box.is-error .box__input {
+             visibility: hidden;
+        }
+         .box__uploading, .box__success, .box__error {
+             display: none;
+             text-align: center;
+        }
+         .box.is-uploading .box__uploading, .box.is-success .box__success, .box.is-error .box__error {
+             display: block;
+             position: absolute;
+             top: 50%;
+             right: 0;
+             left: 0;
+             -webkit-transform: translateY( -50% );
+             transform: translateY( -50% );
+        }
+         .box__uploading {
+             font-style: italic;
+        }
+         .box__success {
+             -webkit-animation: appear-from-inside .25s ease-in-out;
+             animation: appear-from-inside .25s ease-in-out;
+        }
+         @-webkit-keyframes appear-from-inside {
+             from {
+                 -webkit-transform: translateY( -50% ) scale( 0 );
+            }
+             75% {
+                 -webkit-transform: translateY( -50% ) scale( 1.1 );
+            }
+             to {
+                 -webkit-transform: translateY( -50% ) scale( 1 );
+            }
+        }
+         @keyframes appear-from-inside {
+             from {
+                 transform: translateY( -50% ) scale( 0 );
+            }
+             75% {
+                 transform: translateY( -50% ) scale( 1.1 );
+            }
+             to {
+                 transform: translateY( -50% ) scale( 1 );
+            }
+        }
+         .box__restart {
+             font-weight: 700;
+        }
+         .box__restart:focus, .box__restart:hover {
+             color: #39bfd3;
+        }
+         .js .box__file {
+             width: 0.1px;
+             height: 0.1px;
+             opacity: 0;
+             overflow: hidden;
+             position: absolute;
+             z-index: -1;
+        }
+         .js .box__file + label {
+             max-width: 80%;
+             text-overflow: ellipsis;
+             white-space: nowrap;
+             cursor: pointer;
+             display: inline-block;
+             overflow: hidden;
+        }
+        #file_label {
+            display: block;
+            text-align: center;
+            cursor: pointer;
+        }
+        #file_label:hover {
+            color: blue;
+        }
+         .js .box__file + label:hover strong, .box__file:focus + label strong, .box__file.has-focus + label strong {
+             color: #39bfd3;
+        }
+        }
+         .js .box__file:focus + label, .js .box__file.has-focus + label {
+             outline: 1px dotted #000;
+             outline: -webkit-focus-ring-color auto 5px;
+        }
+         .js .box__file + label * {
+            /* pointer-events: none;
+             */
+            /* in case of FastClick lib use */
+        }
+         .no-js .box__file + label {
+             display: none;
+        }
+         .no-js .box__button {
+             display: block;
+        }
+         .box__button {
+             font-weight: 700;
+             color: #e5edf1;
+             background-color: #39bfd3;
+             display: none;
+             padding: 8px 16px;
+             margin: 40px auto 0;
+        }
+         .box__button:hover, .box__button:focus {
+             background-color: #0f3c4b;
+        }
+    </style>
+</head>
+<body>
+    <div id="uploader_div">
+        <h1>Upload your redemption file</h1>
+        <form method="post" class="box">    
+            <div class="box__input">
+                <svg class="box__icon" xmlns="http://www.w3.org/2000/svg" width="50" height="43" viewBox="0 0 50 43" onclick='document.getElementById( "file_label" ).click();'><path d="M48.4 26.5c-.9 0-1.7.7-1.7 1.7v11.6h-43.3v-11.6c0-.9-.7-1.7-1.7-1.7s-1.7.7-1.7 1.7v13.2c0 .9.7 1.7 1.7 1.7h46.7c.9 0 1.7-.7 1.7-1.7v-13.2c0-1-.7-1.7-1.7-1.7zm-24.5 6.1c.3.3.8.5 1.2.5.4 0 .9-.2 1.2-.5l10-11.6c.7-.7.7-1.7 0-2.4s-1.7-.7-2.4 0l-7.1 8.3v-25.3c0-.9-.7-1.7-1.7-1.7s-1.7.7-1.7 1.7v25.3l-7.1-8.3c-.7-.7-1.7-.7-2.4 0s-.7 1.7 0 2.4l10 11.6z"/></svg>
+                <input type="file" name="files[]" id="file" class="box__file" data-multiple-caption="{count} files selected" multiple style="display: none;" onchange="if ( this.files[ 0 ].size < 5000 ) {getFile(this);} else {alert( 'File too large, make sure it is less than 5 kilobytes' ); this.value = null;}" />
+                <label for="file" id="file_label"><strong>Choose a file</strong><span class="box__dragndrop"> or drag it here</span></label>
+                <button type="submit" class="box__button">Upload</button>
+            </div>        
+            <div class="box__uploading">Uploading&hellip;</div>
+            <div class="box__success">Done!</div>
+            <div class="box__error">Error! <span></span>. <a class="box__restart" role="button">Try again!</a></div>
+        </form>
+    </div>
+    <script>
+        function getFile(input) {
+            if ( 'files' in input && input.files.length > 0 ) {
+                handleContent( input.files[0] );
+            }
+        }
+
+        function handleContent( file ) {
+            readFileContent( file ).then( content => {
+                var json = JSON.parse( content );
+                console.log( content );
+                if ( json[ "type" ] == "creator" ) {
+                    sessionStorage[ "event_id" ] = json[ "content" ][ "event_id" ];
+                    sessionStorage[ "nostr_privKey" ] = json[ "content" ][ "nostr_privkey" ];
+                    sessionStorage[ "privkey" ] = json[ "content" ][ "privkey" ];
+                    sessionStorage[ "pubkey" ] = json[ "content" ][ "pubkey" ];
+                } else if ( json[ "type" ] == "contributor" ) {
+                    var tx = json[ "content" ][ "tx" ];
+                    document.getElementById( "extra_info" ).innerHTML = "";
+                    document.getElementById( "extra_info" ).innerHTML += "Great! Your refund transaction was broadcasted. If the fundraiser did not achieve its goal you should receive your money back now. Check your wallet.";
+                    console.log( "tx:", tx );
+                    pushBTCpmt( tx );
+                }
+                socket = new WebSocket( relay );
+                socket.addEventListener( 'open', openConnection );
+                socket.addEventListener( 'message', handleMessage );
+                document.getElementsByClassName( "box" )[ 0 ].classList.add( "is-success" );
+            }).catch( error => console.log( error ) );
+        }
+
+        function readFileContent( file ) {
+            var reader = new FileReader();
+            return new Promise( ( resolve, reject ) => {
+                reader.onload = event => resolve( event.target.result );
+                reader.onerror = error => reject( error );
+                reader.readAsText( file );
+            })
+        }
+    </script>
+    <script>
+
+        'use strict';
+
+        ;( function ( document, window, index )
+        {
+            // feature detection for drag&drop upload
+            var isAdvancedUpload = function()
+                {
+                    var div = document.createElement( 'div' );
+                    return ( ( 'draggable' in div ) || ( 'ondragstart' in div && 'ondrop' in div ) ) && 'FormData' in window && 'FileReader' in window;
+                }();
+
+
+            // applying the effect for every form
+            var forms = document.querySelectorAll( '.box' );
+            Array.prototype.forEach.call( forms, function( form )
+            {
+                var input        = form.querySelector( 'input[type="file"]' ),
+                    label        = form.querySelector( 'label' ),
+                    errorMsg     = form.querySelector( '.box__error span' ),
+                    restart      = form.querySelectorAll( '.box__restart' ),
+                    droppedFiles = false,
+                    showFiles    = function( files )
+                    {
+                        label.textContent = files.length > 1 ? ( '' ).replace( '{count}', files.length ) : files[ 0 ].name;
+                    },
+                    triggerFormSubmit = function()
+                    {
+                        var event = document.createEvent( 'HTMLEvents' );
+                        //event.initEvent( 'submit', true, false );
+                        //form.dispatchEvent( event );
+                    };
+
+                // letting the server side to know we are going to make an Ajax request
+                var ajaxFlag = document.createElement( 'input' );
+                ajaxFlag.setAttribute( 'type', 'hidden' );
+                ajaxFlag.setAttribute( 'name', 'ajax' );
+                ajaxFlag.setAttribute( 'value', 1 );
+                form.appendChild( ajaxFlag );
+
+                // automatically submit the form on file select
+                input.addEventListener( 'change', function( e )
+                {
+                    showFiles( e.target.files );
+
+                    triggerFormSubmit();
+
+                    
+                });
+
+                // drag&drop files if the feature is available
+                if( isAdvancedUpload )
+                {
+                    form.classList.add( 'has-advanced-upload' ); // letting the CSS part to know drag&drop is supported by the browser
+
+                    [ 'drag', 'dragstart', 'dragend', 'dragover', 'dragenter', 'dragleave', 'drop' ].forEach( function( event )
+                    {
+                        form.addEventListener( event, function( e )
+                        {
+                            // preventing the unwanted behaviours
+                            e.preventDefault();
+                            e.stopPropagation();
+                        });
+                    });
+                    [ 'dragover', 'dragenter' ].forEach( function( event )
+                    {
+                        form.addEventListener( event, function()
+                        {
+                            form.classList.add( 'is-dragover' );
+                        });
+                    });
+                    [ 'dragleave', 'dragend', 'drop' ].forEach( function( event )
+                    {
+                        form.addEventListener( event, function()
+                        {
+                            form.classList.remove( 'is-dragover' );
+                        });
+                    });
+                    form.addEventListener( 'drop', function( e )
+                    {
+                        droppedFiles = e.dataTransfer.files; // the files that were dropped
+                        showFiles( droppedFiles );
+                        setTimeout( function() {
+                            form.classList.remove( 'is-uploading' );
+                            form.classList.add( 'is-success' );
+                        }, 300 );
+                        handleContent( droppedFiles[0] );
+                        //getFile( document.getElementById( "file" ) );                        
+                        triggerFormSubmit();
+                    });
+                }
+
+
+                // if the form was submitted
+                form.addEventListener( 'submit', function( e )
+                {
+                    // preventing the duplicate submissions if the current one is in progress
+                    if( form.classList.contains( 'is-uploading' ) ) return false;
+
+                    form.classList.add( 'is-uploading' );
+                    form.classList.remove( 'is-error' );
+
+                    if( isAdvancedUpload ) // ajax file upload for modern browsers
+                    {
+                        e.preventDefault();
+                        setTimeout( function() {
+                            form.classList.remove( 'is-uploading' );
+                            form.classList.add( 'is-success' );
+                        }, 300 );
+                    }
+                    else // fallback Ajax solution upload for older browsers
+                    {
+                        var iframeName  = 'uploadiframe' + new Date().getTime(),
+                            iframe      = document.createElement( 'iframe' );
+
+                            $iframe     = $( '<iframe name="' + iframeName + '" style="display: none;"></iframe>' );
+
+                        iframe.setAttribute( 'name', iframeName );
+                        iframe.style.display = 'none';
+
+                        document.body.appendChild( iframe );
+                        form.setAttribute( 'target', iframeName );
+
+                        iframe.addEventListener( 'load', function()
+                        {
+                            //var data = JSON.parse( iframe.contentDocument.body.innerHTML );
+                            setTimeout( function() {
+                                form.classList.remove( 'is-uploading' );
+                                form.classList.add( 'is-success' );
+                            }, 300 );
+                            //form.classList.remove( 'is-uploading' )
+                            //form.classList.add( data.success == true ? 'is-success' : 'is-error' )
+                            form.removeAttribute( 'target' );
+                            //if( !data.success ) errorMsg.textContent = data.error;
+                            iframe.parentNode.removeChild( iframe );
+                        });
+                    }
+                });
+
+
+                // restart the form if has a state of error/success
+                Array.prototype.forEach.call( restart, function( entry )
+                {
+                    entry.addEventListener( 'click', function( e )
+                    {
+                        e.preventDefault();
+                        form.classList.remove( 'is-error', 'is-success' );
+                        input.click();
+                    });
+                });
+
+                // Firefox focus bug fix for file input
+                input.addEventListener( 'focus', function(){ input.classList.add( 'has-focus' ); });
+                input.addEventListener( 'blur', function(){ input.classList.remove( 'has-focus' ); });
+
+            });
+        }( document, window, 0 ));
+
+    </script>
+    <div id="fundraiser_div" style="display: none;">
+        <h1 id="title">All or nothing fundraiser</h1>
+        <h2>Progress bar <span id="goal" style="font-size: .8em; font-weight: normal;"></span></h2>
+        <div id="progressOutline" style="height: 2em; border: 1px solid grey; border-radius: 25px; overflow: hidden;"><div id="progressBar" style="height: 2em; background-color: #61eb34; width: 0%; transition: width 1s;"></div></div>
+        <div><div id="progressIndicator" style="display: inline-block; width: 0%; transition: width 1s;"></div><div style="display: inline-block; text-align: right;" id="total">raised so far: $0</div></div>
+    </div>
+    <script>
+        sessionStorage.clear();
+        var oracle_nostr = "ffff2be8b5be12fa8b3fb48bb3ebfc40b9b6801bae34aa4d25c899780fb8d6f7";
+        var oracle_pubkey = "02ffff2be8b5be12fa8b3fb48bb3ebfc40b9b6801bae34aa4d25c899780fb8d6f7";
+    </script>
+    <script>
+        async function handleMessage( message ) {
+            var nostr_privKey = sessionStorage[ "nostr_privKey" ];
+            var [ type, subId, event ] = JSON.parse( message.data );
+            var { kind, content } = event || {}
+            if ( !event ) return;
+            var sig_is_valid = await nobleSecp256k1.schnorr.verify( event.sig, event.id, event.pubkey );
+            if ( !sig_is_valid ) return;
+            if ( kind === 4239 ) {
+                if ( !sessionStorage[ "nostr_pubKey" ] ) {
+                    sessionStorage[ "nostr_pubKey" ] = event.pubkey;
+                }
+                setFundraiserDetails( content, event.pubkey );
+            }
+            if ( kind === 20004 ) {
+                content = decrypt( nostr_privKey, event.pubkey, content );
+                console.log( "content:", content );
+            }
+            if ( kind === 4 ) {
+                content = decrypt( nostr_privKey, event.pubkey, content );
+                console.log( "content:", content );
+                if ( event.pubkey == oracle_nostr ) {
+                    var json = JSON.parse( content );
+                    if ( json[ "error" ] && event.created_at > Math.floor( Date.now() / 1000 ) - ( 5 * 60 ) ) {
+                        alert( "Sorry, you did not raise enough money! Try again later." + " " + String( Math.floor( Date.now() / 1000 ) - ( 5 * 60 ) - event.created_at ) );
+                    }
+                    if ( json[ "preimage" ] && !sessionStorage[ "payout_made" ] ) {
+                        //var myaddress = "bcrt1q34z8lkv3fx9n26750nfmvtp5wwxvfnm5v8wq4a";
+                        document.getElementById( "extra_info" ).innerHTML = "";
+                        document.getElementById( "extra_info" ).innerHTML += "Please enter a bitcoin address where you want your money to go.";
+                        document.getElementById( "extra_info" ).innerHTML += '<input type="text" id="address" name="address" />';
+                        document.getElementById( "extra_info" ).innerHTML += `<p><button type="button" id="address_submit" onclick='sessionStorage[ "final_address" ] = document.getElementById( "address" ).value;'>Submit</button></p>`;
+                        sessionStorage[ "address_requested" ] = true;
+                        var myaddress = await waitForBitcoinAddress();
+                        var privkey = sessionStorage[ "privkey" ];
+                        var timestamp = Number( sessionStorage[ "timestamp" ] );
+                        var oracle_hash = sessionStorage[ "oracle_hash" ];
+                        var creatorkey = sessionStorage[ "creatorkey" ];
+                        if ( myaddress && privkey && timestamp && oracle_hash && creatorkey && json[ "preimage" ] && sessionStorage[ "utxos" ] ) {
+                            var tx = prepareTx2( myaddress, privkey, timestamp, oracle_hash, creatorkey, json[ "preimage" ] );
+                            if ( !sessionStorage[ "confirmation_requested" ] && confirm( "Your payout is ready, do you want to broadcast it now? You should only do this on the day the fundraiser ends, otherwise someone might send in a payment and you won't get it." ) ) {
+                                sessionStorage[ "confirmation_requested" ] = true;
+                                pushBTCpmt( tx );
+                                document.getElementById( "extra_info" ).innerHTML = "";
+                                document.getElementById( "extra_info" ).innerHTML += "Your money is on its way, check your wallet. It is safe to close this browser tab now.";
+                                sessionStorage[ "payout_made" ] = true;
+                            }
+                            console.log( `prepareTx2( "${myaddress}", "${privkey}", ${timestamp}, "${oracle_hash}", "${creatorkey}", "${json[ "preimage" ]}" )` );
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script>
+        async function waitForBitcoinAddress() {
+            async function didUserGiveAddressYet() {
+                var address = sessionStorage[ "final_address" ];
+                return new Promise( function( resolve, reject ) {
+                    if ( !address ) {
+                        setTimeout( async function() {
+                            var msg = await didUserGiveAddressYet();
+                            resolve( msg );
+                        }, 100 );
+                    } else {
+                        resolve( address );
+                    }
+                });
+            }
+            async function getTimeoutData() {
+                var address = await didUserGiveAddressYet();
+                return address;
+            }
+            var returnable = await getTimeoutData();
+            return returnable;
+        }
+    </script>
+    <script>
+        async function openConnection( e ) {
+            console.log( "connected to " + relay );
+            if ( sessionStorage[ "event_id" ] ) {
+                var id = sessionStorage[ "event_id" ];
+                var subId   = bitcoinjs.ECPair.makeRandom().privateKey.toString( "hex" );
+                var filter  = { "ids": [ id ] }
+                var subscription = [ "REQ", subId, filter ];
+                socket.send( JSON.stringify( subscription ) );
+            }
+        }
+    </script>
+    <script>
+        function checkHeartbeat() {
+            console.log( "checking heartbeat" );
+            heartbeat = false;
+            var heartbeatsubId   = "00000002" + bitcoinjs.ECPair.makeRandom().privateKey.toString( "hex" ).substring( 8 );
+            var heartbeatfilter  = { "ids": [ "41ce9bc50da77dda5542f020370ecc2b056d8f2be93c1cedf1bf57efcab095b0" ] }
+            var heartbeatsub     = [ "REQ", heartbeatsubId, heartbeatfilter ];
+            if ( socket && socket.readyState != 0 ) {
+                socket.send( JSON.stringify( heartbeatsub ) );
+            }
+            setTimeout( function() {
+                var closer = [ "CLOSE", heartbeatsubId ];
+                if ( socket && socket.readyState != 0 ) {
+                    socket.send( JSON.stringify( closer ) );
+                }
+            }, 1500 );
+            setTimeout( function() {
+                if ( !heartbeat && socket.readyState == 3 ) {
+                    socket.removeEventListener( 'open', openConnection );
+                    socket.removeEventListener( 'message', handleMessage );
+                    socket = new WebSocket( relay );
+                    socket.addEventListener( 'open', openConnection );
+                    socket.addEventListener( 'message', handleMessage );
+                }
+            }, 2000 );
+        }
+    </script>
+    <script>
+        var { getSharedSecret, schnorr, utils } = nobleSecp256k1;
+        var crypto  = window.crypto;
+        var getRand = size => crypto.getRandomValues( new Uint8Array( size ) );
+        var sha256  = bitcoinjs.crypto.sha256;
+        //var nostr_keypair = bitcoinjs.ECPair.makeRandom();
+        //var nostr_privKey = nostr_keypair.privateKey.toString( "hex" );
+        //var nostr_pubKey  = nostr_keypair.publicKey.toString( "hex" );
+        //nostr_pubKey      = nostr_pubKey.substring( 2 );
+        //console.log( "nostr_pubKey:", nostr_pubKey );
+        var relay = "wss://relay.damus.io";
+        var socket = "";
+
+        async function sendDM( message, recipient ) {
+            var nostr_privKey = sessionStorage[ "nostr_privKey" ];
+            var nostr_pubKey = sessionStorage[ "nostr_pubKey" ];
+            var encrypted_message = encrypt( nostr_privKey, recipient, message )
+            var encrypted_event = {
+                "content"    : encrypted_message,
+                "created_at" : Math.floor( Date.now() / 1000 ),
+                "kind"       : 20004,
+                "tags"       : [ [ 'p', recipient ] ],
+                "pubkey"     : nostr_pubKey,
+            }
+            var signedEncryptedEvent = await getSignedEvent( encrypted_event, nostr_privKey );
+            console.log( JSON.stringify( signedEncryptedEvent ) );
+            socket.send( JSON.stringify( [ "EVENT", signedEncryptedEvent ] ) );
+        }
+
+        async function sendFundingInfo( message, fundraiser_pubkey ) {
+            var nostr_privKey = sessionStorage[ "nostr_privKey" ];
+            var event = {
+                "content"    : message,
+                "created_at" : Math.floor( Date.now() / 1000 ),
+                "kind"       : 4239,
+                "tags"       : [ [ 'p', fundraiser_pubkey ] ],
+                "pubkey"     : nostr_pubKey,
+            }
+            var signedEvent = await getSignedEvent( event, nostr_privKey );
+            console.log( 'signedEvent:', signedEvent );
+            socket.send( JSON.stringify( [ "EVENT", signedEvent ] ) );
+        }
+
+        async function getSignedEvent(event, privateKey) {
+            var eventData = JSON.stringify([
+                0,                    // Reserved for future use
+                event['pubkey'],        // The sender's public key
+                event['created_at'],    // Unix timestamp
+                event['kind'],        // Message “kind” or type
+                event['tags'],        // Tags identify replies/recipients
+                event['content']        // Your note contents
+            ])
+            event.id  = sha256( eventData ).toString( 'hex' );
+            event.sig = await schnorr.sign( event.id, privateKey );
+            return event;
+        }
+        function hexToBytes( hex ) {
+            return Uint8Array.from( hex.match( /.{1,2}/g ).map( ( byte ) => parseInt( byte, 16 ) ) );
+        }
+
+        function bytesToHex( bytes ) {
+            return bytes.reduce( ( str, byte ) => str + byte.toString( 16 ).padStart( 2, '0' ), '' );
+        }
+        function base64ToHex( str ) {
+            var raw = atob( str );
+            var result = '';
+            var i; for ( i=0; i<raw.length; i++ ) {
+                var hex = raw.charCodeAt( i ).toString( 16 );
+                result += ( hex.length === 2 ? hex : '0' + hex );
+            }
+            return result;
+        }
+        function encrypt( privkey, pubkey, text ) {
+            var key = nobleSecp256k1.getSharedSecret( privkey, '02' + pubkey, true ).substring( 2 );
+            var iv = window.crypto.getRandomValues( new Uint8Array( 16 ) );
+            var cipher = browserifyCipher.createCipheriv( 'aes-256-cbc', hexToBytes( key ), iv );
+            var encryptedMessage = cipher.update(text,"utf8","base64");
+            emsg = encryptedMessage + cipher.final( "base64" );
+            var uint8View = new Uint8Array( iv.buffer );
+            var decoder = new TextDecoder();
+            return emsg + "?iv=" + btoa( String.fromCharCode.apply( null, uint8View ) );
+        }
+        function decrypt( privkey, pubkey, ciphertext ) {
+            var [ emsg, iv ] = ciphertext.split( "?iv=" );
+            var key = nobleSecp256k1.getSharedSecret( privkey, '02' + pubkey, true ).substring( 2 );
+            var decipher = browserifyCipher.createDecipheriv(
+                'aes-256-cbc',
+                hexToBytes( key ),
+                hexToBytes( base64ToHex( iv ) )
+            );
+            var decryptedMessage = decipher.update( emsg, "base64" );
+            dmsg = decryptedMessage + decipher.final( "utf8" );
+            return dmsg;
+        }
+    </script>
+    <script>
+        function getBitcoinPrice() {
+          return new Promise( function( resolve, reject ) {
+            var xhttp = new XMLHttpRequest();
+              xhttp.onreadystatechange = function() {
+                if ( this.readyState == 4 && this.status == 200 ) {
+                var json = JSON.parse( xhttp.responseText );
+            var price = json[ "data" ][ "amount" ];
+                resolve( price );
+              }
+            };
+            xhttp.open( "GET", "https://api.coinbase.com/v2/prices/BTC-USD/spot", true );
+            xhttp.send();
+          });
+        }
+    </script>
+    <script>
+        async function doBackgroundTasks() {
+            checkHeartbeat();
+            sessionStorage[ "bitcoin_price" ] = await getBitcoinPrice();
+            setTimeout( function() {doBackgroundTasks();}, 10000 );
+            if ( sessionStorage[ "last-update" ] ) {
+                var lastupdate = Number( sessionStorage[ "last-update" ] );
+                var now = Math.floor( Date.now() / 1000 );
+                var timestamp = Number( sessionStorage[ "timestamp" ] );
+                if ( lastupdate < now - 5 && now >= timestamp ) {
+                    console.log( now, timestamp );
+                    console.log( timestamp - now );
+                    if ( document.getElementById( "progressBar" ).style.width != "100%" ) {
+                        document.getElementById( "extra_info" ).innerHTML = "";
+                        document.getElementById( "extra_info" ).innerHTML += "Oh no! It looks like you did not receive enough contributions to trigger a redemption. Sorry! The donors should automatically get their money back now, and maybe some already did.";
+                    } else if ( !document.getElementById( "extra_info" ).innerHTML.includes( "Great!" ) && !sessionStorage[ "payout_made" ] && !sessionStorage[ "address_requested" ] ) {
+                        document.getElementById( "extra_info" ).innerHTML = "";
+                        document.getElementById( "extra_info" ).innerHTML += "Wow! It looks like you received enough contributions to trigger a redemption. Great! You should see instructions on how to claim your money in a few moments.";
+                        sendDM( `{"type":"over","event_id":"${sessionStorage[ "event_id" ]}"}`, oracle_nostr );
+                    }
+                }
+            }
+        }
+        doBackgroundTasks();
+    </script>
+    <script>
+        function isValidJson( content ) {
+                try {  
+                    var json = JSON.parse( content );
+                } catch ( e ) {
+                    return false;  
+                }
+                return true;
+        }
+    </script>
+    <script>
+        async function setFundraiserDetails( content, sender ) {
+            if ( !isValidJson( content ) ) return;
+            var json = JSON.parse( content );
+            if ( json[ "type" ] == "funding info" ) {
+                console.log( content );
+                var pubkey = JSON.parse( content )[ "content" ][ "pubkey" ];
+                var txid = JSON.parse( content )[ "content" ][ "txid" ];
+                var txindex = JSON.parse( content )[ "content" ][ "txindex" ];
+                var timestamp = Number( sessionStorage[ "timestamp" ] );
+                var contributorkey = pubkey;
+                var oracle_hash = sessionStorage[ "oracle_hash" ];
+                var creatorkey = sessionStorage[ "creatorkey" ];
+                var goal = Number( sessionStorage[ "goal" ] );
+                console.log( "address info:", timestamp, contributorkey, oracle_hash, creatorkey );
+                var real_address = makeFundraiserAddress( timestamp, contributorkey, oracle_hash, creatorkey );
+                var data = await getData( "https://mempool.space/api/tx/" + txid );
+                var claimed_address = JSON.parse( data )[ "vout" ][ txindex ][ "scriptpubkey_address" ];
+                if ( claimed_address != real_address ) return;
+                var value = JSON.parse( data )[ "vout" ][ txindex ][ "value" ];
+                if ( sessionStorage[ "utxos" ] ) {
+                    var utxos = JSON.parse( sessionStorage[ "utxos" ] );
+                } else {                    
+                    var utxos = {}
+                }
+                var utxo = {}
+                utxo[ "txid" ] = txid;
+                utxo[ "txindex" ] = txindex;
+                utxo[ "amount" ] = value;
+                utxo[ "pubkey" ] = contributorkey;
+                if ( txid in utxos && utxos[ txid ][ "txindex" ] == txindex ) return;
+                utxos[ txid ] = utxo;
+                sessionStorage[ "utxos" ] = JSON.stringify( utxos );
+                var value_in_dollars = satsToBitcoin( value ) * Number( sessionStorage[ "bitcoin_price" ] );
+                if ( sessionStorage[ "total" ] ) {
+                    var total = Number( sessionStorage[ "total" ] ) + value_in_dollars;
+                    sessionStorage[ "total" ] = total;
+                } else {
+                    var total = value_in_dollars;
+                    sessionStorage[ "total" ] = total;
+                }
+                console.log( Math.round( total.toFixed( 2 ) ) );
+                var width = Math.floor( ( Math.round( total.toFixed( 2 ) ) / goal ) * 100 );
+                if ( width > 100 ) {
+                    width = 100;
+                }
+                document.getElementById( "progressBar" ).style.width = width + "%";
+                document.getElementById( "total" ).innerText = `raised so far: $${Math.round( total.toFixed( 2 ) )}`;
+                document.getElementById( "progressIndicator" ).style.width = "calc( " + width + "% - " + document.getElementById( "total" ).offsetWidth + "px";
+                sessionStorage[ "last-update" ] = Math.floor( Date.now() / 1000 );
+                if ( now >= timestamp ) {
+                    document.getElementById( "extra_info" ).innerHTML = "";
+                    document.getElementById( "extra_info" ).innerHTML += "Processing contributions...";
+                }
+            } else {
+                var name = json[ "name" ];
+                var oracle_hash = json[ "oracle_hash" ];
+                var oracle_pubkey = json[ "oracle_pubkey" ];
+                var creator_pubkey = json[ "creator_pubkey" ];
+                var timestamp = json[ "timestamp" ];
+                var goal = json[ "goal" ];
+                var denomination = json[ "denomination" ];
+                var creator = sender;
+                var creatorkey = creator_pubkey;
+                sessionStorage[ "creator" ] = creator;
+                sessionStorage[ "timestamp" ] = timestamp;
+                sessionStorage[ "oracle_hash" ] = oracle_hash;
+                sessionStorage[ "creatorkey" ] = creatorkey;
+                sessionStorage[ "goal" ] = goal;
+                var goal = `Goal: $${goal.toLocaleString()}`;
+                document.getElementById( "title" ).innerText = name;
+                document.getElementById( "goal" ).innerText = goal;
+                document.body.style.display = "block";
+                var subId2   = bitcoinjs.ECPair.makeRandom().privateKey.toString( "hex" );
+                var filter2  = { "#p": [ creator ] }
+                var subscription = [ "REQ", subId2, filter2 ];
+                socket.send( JSON.stringify( subscription ) );
+                document.getElementById( "uploader_div" ).style.display = "none";
+                document.getElementById( "fundraiser_div" ).style.display = "block";
+                var now = Math.floor( Date.now() / 1000 );
+                console.log( "timestamp:", timestamp, "now:", now );
+                if ( now < timestamp ) {
+                    document.getElementById( "extra_info" ).innerHTML = "";
+                    document.getElementById( "extra_info" ).innerHTML += "Be patient, the fundraiser isn't over yet";
+                }
+            }
+        }
+    </script>
+    <script>
+        function generateFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey ) {
+            return bitcoinjs.script.fromASM(
+                makeFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey )
+                .trim()
+                .replace(/\s+/g, ' '),
+            );
+        }
+        function makeFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey ) {
+            var scr = `
+                OP_IF
+                    ${ bitcoinjs.script.number.encode( timestamp ).toString( 'hex' ) }
+                    OP_CHECKLOCKTIMEVERIFY
+                    OP_DROP
+                    ${ contributorkey }
+                OP_ELSE
+                    OP_HASH160
+                    ${ oracle_hash }
+                    OP_EQUALVERIFY
+                    ${ creatorkey }
+                OP_ENDIF
+                OP_CHECKSIG
+            `.replace( '\n', '' ).replace( / /g, '' );
+            return scr;
+        }
+        function makeFundraiserAddress( timestamp, contributorkey, oracle_hash, creatorkey ) {
+            //make sure everyone gets their money back 24 hours after the fundraiser ends if the oracle does not let the winner win
+            var p2wsh = bitcoinjs.payments.p2wsh({redeem: {output: generateFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey ), network: bitcoinjs.networks.mainnet}, network: bitcoinjs.networks.mainnet });
+            return p2wsh.address;
+        }
+    </script>
+    <script>
+        function prepareTx( txid, txindex, amount, myaddress, privkey, timestamp, contributorkey, oracle_hash, creatorkey ) {
+            var original_quantity_of_sats = amount;
+            var total_fee = 500;
+            var new_quantity_of_sats = amount - total_fee;
+            var witnessscript = generateFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey );
+            var p2wsh = bitcoinjs.payments.p2wsh({ redeem: { output: witnessscript, network: bitcoinjs.networks.mainnet }, network: bitcoinjs.networks.mainnet });
+            var outputscript = "00" + bitcoinjs.crypto.sha256( witnessscript ).toString( 'hex' );
+            var psbt = new bitcoinjs.Psbt({ network: bitcoinjs.networks.mainnet });
+            psbt.setLocktime( timestamp );
+            psbt
+            .addInput({
+                hash: txid,
+                index: txindex,
+                sequence: 0xfffffffd,
+                witnessScript: p2wsh.redeem.output,
+                witnessUtxo: {
+                    script: buffer.Buffer.from( '0020' + bitcoinjs.crypto.sha256( buffer.Buffer.from( witnessscript, 'hex' ) ).toString( 'hex' ), 'hex' ),
+                    value: original_quantity_of_sats
+                },
+            });
+            psbt.addOutput({
+                address: myaddress,
+                value: new_quantity_of_sats,
+            });
+            psbt.signInput( 0, bitcoinjs.ECPair.fromPrivateKey( buffer.Buffer.from( privkey, "hex" ) ) );
+            var getFinalScripts = ( txindex, input, script ) => {
+                //Step 1: Check to make sure the meaningful locking script matches what you expect.
+                var decompiled = bitcoinjs.script.decompile( script );
+                if ( !decompiled ) {
+                    throw new Error( `Can not finalize input #${txindex}` );
+                }
+                //Step 2: Create final scripts
+                var stack_elements = [];
+                stack_elements.push( input.partialSig[ 0 ].signature );
+                stack_elements.push( bitcoinjs.script.OPS.OP_1 );
+                var witnessStack = bitcoinjs.payments.p2wsh({
+                    redeem: {
+                        output: script,
+                        input: bitcoinjs.script.compile( stack_elements ),
+                    }
+                });
+                return {
+                    finalScriptWitness: witnessStackToScriptWitness( witnessStack.witness )
+                }
+            }
+            psbt.finalizeInput( 0, getFinalScripts );
+            return psbt.extractTransaction().toHex();
+        }
+    </script>
+    <script>
+        function pushBTCpmt( rawtx ) {
+            var xhttp = new XMLHttpRequest();
+            xhttp.onreadystatechange = function() {
+                if ( this.readyState == 4 && ( this.status > 199 && this.status < 300 ) ) {
+                    var response = this.responseText;
+                    console.log( "Your transaction was broadcasted, your txid is: " + response );
+                }
+            };
+            xhttp.open( "POST", "https://mempool.space/api/tx", true );
+            xhttp.send( rawtx );
+        }
+    </script>
+    <script>
+        function prepareTx2( myaddress, privkey, timestamp, oracle_hash, creatorkey, preimage ) {
+            var utxos = JSON.parse( sessionStorage[ "utxos" ] );
+            var psbt = new bitcoinjs.Psbt({ network: bitcoinjs.networks.mainnet });
+            var sum = 0;
+            Object.keys( utxos ).forEach( function( utxo ) {
+                var tx = utxos[ utxo ];
+                sum = sum + Number( tx[ "amount" ] );
+                var witnessscript = generateFundraiserScript( timestamp, tx[ "pubkey" ], oracle_hash, creatorkey );
+                console.log( "witnessscript:", witnessscript.toString( "hex" ) );
+                var p2wsh = bitcoinjs.payments.p2wsh({ redeem: { output: witnessscript, network: bitcoinjs.networks.mainnet }, network: bitcoinjs.networks.mainnet });
+                console.log( "these are the same, right?", '0020' + bitcoinjs.crypto.sha256( witnessscript ).toString('hex').toString( 'hex' ), '0020' + bitcoinjs.crypto.sha256( buffer.Buffer.from( witnessscript, 'hex' ) ).toString( 'hex' ) );
+                psbt.addInput({
+                    hash: tx[ "txid" ],
+                    index: tx[ "txindex" ],
+                    sequence: 0xfffffffd,
+                    witnessScript: p2wsh.redeem.output,
+                    witnessUtxo: {
+                        script: buffer.Buffer.from( '0020' + bitcoinjs.crypto.sha256( buffer.Buffer.from( witnessscript, 'hex' ) ).toString( 'hex' ), 'hex' ),
+                        value: Number( tx[ "amount" ] )
+                    },
+                });
+            });
+            var total_fee = ( 100 * Object.keys( utxos ).length ) + 500;
+            var new_quantity_of_sats = sum - total_fee;
+            psbt.addOutput({
+                address: myaddress,
+                value: new_quantity_of_sats,
+            });
+            Object.keys( utxos ).forEach( function( utxo, index ) {
+                psbt.signInput( index, bitcoinjs.ECPair.fromPrivateKey( buffer.Buffer.from( privkey, "hex" ) ) );
+            });
+            var getFinalScripts = ( txindex, input, script ) => {
+                //Step 1: Check to make sure the meaningful locking script matches what you expect.
+                var decompiled = bitcoinjs.script.decompile( script );
+                if ( !decompiled ) {
+                    throw new Error( `Can not finalize input #${txindex}` );
+                }
+                //Step 2: Create final scripts
+                var stack_elements = [];
+                stack_elements.push( input.partialSig[ 0 ].signature );
+                stack_elements.push( buffer.Buffer.from( preimage, "hex" ) );
+                stack_elements.push( '' );
+                var witnessStack = bitcoinjs.payments.p2wsh({
+                    redeem: {
+                        output: script,
+                        input: bitcoinjs.script.compile( stack_elements ),
+                    }
+                });
+                return {
+                    finalScriptWitness: witnessStackToScriptWitness( witnessStack.witness )
+                }
+            }
+            Object.keys( utxos ).forEach( function( utxo, index ) {
+                psbt.finalizeInput( index, getFinalScripts );
+            });
+            return psbt.extractTransaction().toHex();
+        }
+    </script>
+    <script>
+        function createQR( content ) {
+            var dataUriPngImage = document.createElement( "img" ),
+            s = QRCode.generatePNG( content, {
+                ecclevel: 'M',
+                format: 'html',
+                fillcolor: '#FFFFFF',
+                textcolor: '#000000',
+                margin: 4,
+                modulesize: 8,
+            });
+            dataUriPngImage.src = s;
+            dataUriPngImage.id = "qr_code";
+            return dataUriPngImage;
+        }
+    </script>
+    <script>
+        function witnessStackToScriptWitness(witness) {
+          let buffer2 = buffer.Buffer.allocUnsafe(0);
+          function writeSlice(slice) {
+            buffer2 = buffer.Buffer.concat([buffer2, buffer.Buffer.from(slice)]);
+          }
+          function writeVarInt(i) {
+            const currentLen = buffer2.length;
+            const varintLen = varuintBitcoin.encodingLength(i);
+            buffer2 = buffer.Buffer.concat([buffer2, buffer.Buffer.allocUnsafe(varintLen)]);
+            varuintBitcoin.encode(i, buffer2, currentLen);
+          }
+          function writeVarSlice(slice) {
+            writeVarInt(slice.length);
+            writeSlice(slice);
+          }
+          function writeVector(vector) {
+            writeVarInt(vector.length);
+            vector.forEach(writeVarSlice);
+          }
+          writeVector(witness);
+          return buffer2;
+        }
+    </script>
+    <script>
+        function modalVanish() {
+            document.getElementById( "black-bg" ).style.display = "none";
+            document.getElementById( "modal" ).style.display = "none";
+        }
+    </script>
+    <script>
+        function getData( url ) {
+            return new Promise( function( resolve, reject ) {
+                var xhttp = new XMLHttpRequest();
+                xhttp.onreadystatechange = function() {
+                    if ( this.readyState == 4 && ( this.status > 199 && this.status < 300 ) ) {
+                        resolve( xhttp.responseText );
+                    };
+                }
+                xhttp.open( "GET", url, true );
+                xhttp.send();
+            });
+        }
+    </script>
+    <script>
+        function satsToBitcoin( sats ) {
+            return "0." + String( sats ).padStart( 8, "0" );
+        }
+    </script>
+    <div id="black-bg" onclick="modalVanish();"></div>
+    <div id="modal"></div>
+    <div id="extra_info" style="margin-top: 20px;"></div>
+</body>
+</html>

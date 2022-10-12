@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+    <script src="https://bitcoincore.tech/apps/bitcoinjs-ui/lib/bitcoinjs-lib.js"></script>
+    <script src="https://bundle.run/noble-secp256k1@1.2.14"></script>
+    <script src="https://bundle.run/browserify-cipher@1.0.1"></script>
+    <script src="https://bundle.run/buffer@6.0.3"></script>
+    <script src="https://bundle.run/varuint-bitcoin@1.1.2"></script>
+    <script src="https://supertestnet.github.io/bitcoin-chess/js/qrcode.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            font-size: 1.15em;
+            font-family: Arial, sans-serif;
+        }
+        html {
+            max-width: 70ch;
+            padding: 3em 1em;
+            margin: auto;
+            line-height: 1.25;
+        }
+        h1 {
+            font-size: 2em;
+        }
+        h2 {
+            font-size: 1.5em;
+        }
+        input {
+            width: 100%;
+            height: 1.8em;
+            border: 1px solid grey;
+        }
+        #black-bg {
+            display: none;
+            width: 100%;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background-color: #000;
+            opacity: .5;
+            width: 100vw;
+            height: 100vh;
+        }
+        #modal{
+            display: none;
+            position: fixed;
+            box-sizing: border-box;
+            top: 50%;
+            left: 50%;
+            transform: translate( -50%, -50% );
+            width: 100%;
+            max-width: 560px;
+            background-color: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            color: #000;
+            text-align: center;
+            overflow-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        Loading...
+    </div>
+    <div id="meaningful_content" style="display: none;">
+        <h1 id="title">All or nothing fundraiser</h1>
+        <p id="message"></p>
+        <input type="text" placeholder="your refund address" id="address" name="address" />
+        <p>
+            <button type="button" id="submitter" name="submitter" onclick='showQR( sessionStorage[ "fundraiser_address" ]);'>Submit</button>
+        </p>
+        <p>
+            ⚠️ You are about to see a bitcoin smart contract address, do not share it! It is for your eyes only. Other contributors will see different addresses. If more than one person sends money to your smart contract address their money could be lost forever.
+        </p>
+        <h2>Progress bar <span id="goal" style="font-size: .8em; font-weight: normal;"></span></h2>
+        <div id="progressOutline" style="height: 2em; border: 1px solid grey; border-radius: 25px; overflow: hidden;"><div id="progressBar" style="height: 2em; background-color: #61eb34; width: 0%; transition: width 1s;"></div></div>
+        <div><div id="progressIndicator" style="display: inline-block; width: 0%; transition: width 1s;"></div><div style="display: inline-block; text-align: right;" id="total">raised so far: $0</div></div>
+        <script>
+            sessionStorage.clear();
+            var keypair = bitcoinjs.ECPair.makeRandom();
+            var privkey = keypair.privateKey.toString( "hex" );
+            var pubkey = keypair.publicKey.toString( "hex" );
+            sessionStorage[ "privkey" ] = privkey;
+            sessionStorage[ "pubkey" ] = pubkey;
+            console.log( "pubkey:", pubkey );
+            var queryString = window.location.search;
+            var params = new URLSearchParams( queryString );
+            var id = params.get( "id" );
+            console.log( "id:", id );
+            var num_of_fundraisers_by_creator = 0;
+        </script>
+        <script>
+            async function theCreatorDidOnlyOneFundraiser( creator ) {
+                var subId3   = "00000000" + bitcoinjs.ECPair.makeRandom().privateKey.toString( "hex" ).substring( 8 );
+                var filter3  = { "authors": [ creator ], "kinds": [ 4239 ] }
+                var subscription3 = [ "REQ", subId3, filter3 ];
+                socket.send( JSON.stringify( subscription3 ) );
+                console.log( "waiting starts" );
+                var timeout = await waitSomeSeconds( 3 );
+                console.log( "waiting ends" );
+                console.log( "num_of_fundraisers_by_creator:", num_of_fundraisers_by_creator );
+                if ( num_of_fundraisers_by_creator == 1 ) {
+                    return true;
+                }
+                return false;
+            }
+        </script>
+        <script>
+            function waitSomeSeconds( num ) {
+              var num = num.toString() + "000";
+              num = Number( num );
+              return new Promise( function( resolve, reject ) {
+                setTimeout( function() { resolve( "" ); }, num );
+              });
+            }
+        </script>
+        <script>
+            async function handleMessage( message ) {
+                var [ type, subId, event ] = JSON.parse( message.data );
+                var { kind, content } = event || {}
+                if ( !event ) return;
+                var sig_is_valid = await nobleSecp256k1.schnorr.verify( event.sig, event.id, event.pubkey );
+                if ( !sig_is_valid ) return;
+                if ( kind === 4239 && !subId.startsWith( "00000000" ) ) {
+                    setFundraiserDetails( content, event.pubkey );
+                }
+                if ( kind === 20004 ) {
+                    content = decrypt( nostr_privKey, event.pubkey, content );
+                    console.log( "content:", content );
+                }
+                if ( kind === 4239 && subId.startsWith( "00000000" ) ) {
+                    num_of_fundraisers_by_creator = num_of_fundraisers_by_creator + 1;
+                }
+            }
+        </script>
+        <script>
+            async function openConnection( e ) {
+                console.log( "connected to " + relay );
+                var subscription = [ "REQ", subId, filter ];
+                socket.send( JSON.stringify( subscription ) );
+                num_of_fundraisers_by_creator = 0;
+            }
+        </script>
+        <script>
+            function checkHeartbeat() {
+                console.log( "checking heartbeat" );
+                heartbeat = false;
+                var heartbeatsubId   = "00000002" + bitcoinjs.ECPair.makeRandom().privateKey.toString( "hex" ).substring( 8 );
+                var heartbeatfilter  = { "ids": [ "41ce9bc50da77dda5542f020370ecc2b056d8f2be93c1cedf1bf57efcab095b0" ] }
+                var heartbeatsub     = [ "REQ", heartbeatsubId, heartbeatfilter ];
+                if ( socket && socket.readyState != 0 ) {
+                    socket.send( JSON.stringify( heartbeatsub ) );
+                }
+                setTimeout( function() {
+                    var closer = [ "CLOSE", heartbeatsubId ];
+                    if ( socket && socket.readyState != 0 ) {
+                        socket.send( JSON.stringify( closer ) );
+                    }
+                }, 1500 );
+                setTimeout( function() {
+                    if ( !heartbeat && socket.readyState == 3 ) {
+                        socket.removeEventListener( 'open', openConnection );
+                        socket.removeEventListener( 'message', handleMessage );
+                        socket = new WebSocket( relay );
+                        socket.addEventListener( 'open', openConnection );
+                        socket.addEventListener( 'message', handleMessage );
+                    }
+                }, 2000 );
+            }
+        </script>
+        <script>
+            async function setFundraiserDetails( content, sender ) {
+                if ( !isValidJson( content ) ) return;
+                var json = JSON.parse( content );
+                if ( json[ "type" ] == "funding info" ) {
+                    console.log( content );
+                    var pubkey = JSON.parse( content )[ "content" ][ "pubkey" ];
+                    var txid = JSON.parse( content )[ "content" ][ "txid" ];
+                    var txindex = JSON.parse( content )[ "content" ][ "txindex" ];
+                    var timestamp = Number( sessionStorage[ "timestamp" ] );
+                    var contributorkey = pubkey;
+                    var oracle_hash = sessionStorage[ "oracle_hash" ];
+                    var creatorkey = sessionStorage[ "creatorkey" ];
+                    var goal = Number( sessionStorage[ "goal" ] );
+                    console.log( "address info:", timestamp, contributorkey, oracle_hash, creatorkey );
+                    var real_address = makeFundraiserAddress( timestamp, contributorkey, oracle_hash, creatorkey );
+                    var data = await getData( "https://mempool.space/api/tx/" + txid );
+                    var claimed_address = JSON.parse( data )[ "vout" ][ txindex ][ "scriptpubkey_address" ];
+                    if ( claimed_address != real_address ) return;
+                    var value = JSON.parse( data )[ "vout" ][ txindex ][ "value" ];
+                    if ( sessionStorage[ "utxos" ] ) {
+                        var utxos = JSON.parse( sessionStorage[ "utxos" ] );
+                    } else {                    
+                        var utxos = {}
+                    }
+                    var utxo = {}
+                    utxo[ "txid" ] = txid;
+                    utxo[ "txindex" ] = txindex;
+                    utxo[ "amount" ] = value;
+                    utxo[ "pubkey" ] = contributorkey;
+                    if ( txid in utxos && utxos[ txid ][ "txindex" ] == txindex ) return;
+                    utxos[ txid ] = utxo;
+                    sessionStorage[ "utxos" ] = JSON.stringify( utxos );
+                    var value_in_dollars = satsToBitcoin( value ) * Number( sessionStorage[ "bitcoin_price" ] );
+                    if ( sessionStorage[ "total" ] ) {
+                        var total = Number( sessionStorage[ "total" ] ) + value_in_dollars;
+                        sessionStorage[ "total" ] = total;
+                    } else {
+                        var total = value_in_dollars;
+                        sessionStorage[ "total" ] = total;
+                    }
+                    console.log( Math.round( total.toFixed( 2 ) ) );
+                    var width = Math.floor( ( Math.round( total.toFixed( 2 ) ) / goal ) * 100 );
+                    if ( width > 100 ) {
+                        width = 100;
+                    }
+                    document.getElementById( "progressBar" ).style.width = width + "%";
+                    document.getElementById( "total" ).innerText = `raised so far: $${Math.round( total.toFixed( 2 ) )}`;
+                    document.getElementById( "progressIndicator" ).style.width = "calc( " + width + "% - " + document.getElementById( "total" ).offsetWidth + "px";
+                } else {
+                    var thereWasOnlyOneFundraiser = await theCreatorDidOnlyOneFundraiser( sender );
+                    if ( !thereWasOnlyOneFundraiser ) {
+                        alert( "Something went horribly wrong, aborting" );
+                        return;
+                    }
+                    var name = json[ "name" ];
+                    var oracle_hash = json[ "oracle_hash" ];
+                    var oracle_pubkey = json[ "oracle_pubkey" ];
+                    var oracle_sig = json[ "oracle_sig" ];
+                    var msg = `this hash: ${oracle_hash} is valid only for the fundraiser created by this pubkey: ${sender}`;
+                    var sigIsValid = await nobleSecp256k1.verify( oracle_sig, bitcoinjs.crypto.sha256( msg ), oracle_pubkey );
+                    if ( !sigIsValid || !trusted_oracles.includes( oracle_pubkey ) ) {
+                        alert( "something went horribly wrong" );
+                        return;
+                    } else {
+                        console.log( "yay the sig was valid" );
+                    }
+                    var creator_pubkey = json[ "creator_pubkey" ];
+                    var timestamp = json[ "timestamp" ];
+                    var goal = json[ "goal" ];
+                    var denomination = json[ "denomination" ];
+                    var creator = sender;
+                    var contributorkey = sessionStorage[ "pubkey" ];
+                    var creatorkey = creator_pubkey;
+                    sessionStorage[ "creator" ] = creator;
+                    sessionStorage[ "timestamp" ] = timestamp;
+                    sessionStorage[ "oracle_hash" ] = oracle_hash;
+                    sessionStorage[ "creatorkey" ] = creatorkey;
+                    sessionStorage[ "goal" ] = goal;
+                    console.log( "address info:", timestamp, contributorkey, oracle_hash, creatorkey );
+                    var address = makeFundraiserAddress( timestamp, contributorkey, oracle_hash, creatorkey );
+                    console.log( "fundraiser info:", timestamp, contributorkey, oracle_hash, creatorkey );
+                    sessionStorage[ "fundraiser_address" ] = address;
+                    console.log( "fundraiser_address:", address );
+                    console.log( "content:", content, "sender:", sender );
+                    var message = `Please enter a bitcoin address. If $${goal.toLocaleString()} is not raised by ${new Date( ( timestamp - 86400 ) * 1000 ).toLocaleDateString()}, you will get a full refund, minus a mining fee.`;
+                    var goal = `Goal: $${goal.toLocaleString()}`;
+                    document.getElementById( "title" ).innerText = name;
+                    document.getElementById( "message" ).innerText = message;
+                    document.getElementById( "goal" ).innerText = goal;
+                    document.getElementById( "loading" ).style.display = "none";
+                    document.getElementById( "meaningful_content" ).style.display = "block";
+                    var subId2   = bitcoinjs.ECPair.makeRandom().privateKey.toString( "hex" );
+                    var filter2  = { "#p": [ creator ] }
+                    var subscription = [ "REQ", subId2, filter2 ];
+                    socket.send( JSON.stringify( subscription ) );
+                }
+            }
+        </script>
+        <script>
+            function generateFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey ) {
+                return bitcoinjs.script.fromASM(
+                    makeFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey )
+                    .trim()
+                    .replace(/\s+/g, ' '),
+                );
+            }
+            function makeFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey ) {
+                var scr = `
+                    OP_IF
+                        ${ bitcoinjs.script.number.encode( timestamp ).toString( 'hex' ) }
+                        OP_CHECKLOCKTIMEVERIFY
+                        OP_DROP
+                        ${ contributorkey }
+                    OP_ELSE
+                        OP_HASH160
+                        ${ oracle_hash }
+                        OP_EQUALVERIFY
+                        ${ creatorkey }
+                    OP_ENDIF
+                    OP_CHECKSIG
+                `.replace( '\n', '' ).replace( / /g, '' );
+                return scr;
+            }
+            function makeFundraiserAddress( timestamp, contributorkey, oracle_hash, creatorkey ) {
+                //make sure everyone gets their money back 24 hours after the fundraiser ends if the oracle does not let the winner win
+                var p2wsh = bitcoinjs.payments.p2wsh({redeem: {output: generateFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey ), network: bitcoinjs.networks.mainnet}, network: bitcoinjs.networks.mainnet });
+                return p2wsh.address;
+            }
+        </script>
+        <script>
+            var { getSharedSecret, schnorr, utils } = nobleSecp256k1;
+            var crypto  = window.crypto;
+            var getRand = size => crypto.getRandomValues( new Uint8Array( size ) );
+            var sha256  = bitcoinjs.crypto.sha256;
+            var nostr_keypair = bitcoinjs.ECPair.makeRandom();
+            var nostr_privKey = nostr_keypair.privateKey.toString( "hex" );
+            var nostr_pubKey  = nostr_keypair.publicKey.toString( "hex" );
+            nostr_pubKey      = nostr_pubKey.substring( 2 );
+            console.log( "nostr_pubKey:", nostr_pubKey );
+            trusted_oracles = [];
+            trusted_oracles.push( "02ffff2be8b5be12fa8b3fb48bb3ebfc40b9b6801bae34aa4d25c899780fb8d6f7" );
+            var relay = "wss://relay.damus.io";
+            var socket = new WebSocket( relay );
+            socket.addEventListener( 'message', handleMessage );
+            var subId   = bitcoinjs.ECPair.makeRandom().privateKey.toString( "hex" );
+            var filter  = { "ids": [ id ] }
+            socket.addEventListener( 'open', openConnection );
+
+            async function sendDM( message, recipient ) {
+                var encrypted_message = encrypt( nostr_privKey, recipient, message )
+                var encrypted_event = {
+                    "content"    : encrypted_message,
+                    "created_at" : Math.floor( Date.now() / 1000 ),
+                    "kind"       : 20004,
+                    "tags"       : [ [ 'p', recipient ] ],
+                    "pubkey"     : nostr_pubKey,
+                }
+                var signedEncryptedEvent = await getSignedEvent( encrypted_event, nostr_privKey );
+                socket.send( JSON.stringify( [ "EVENT", signedEncryptedEvent ] ) );
+            }
+
+            async function sendFundingInfo( message, fundraiser_pubkey ) {
+                var event = {
+                    "content"    : message,
+                    "created_at" : Math.floor( Date.now() / 1000 ),
+                    "kind"       : 4239,
+                    "tags"       : [ [ 'p', fundraiser_pubkey ] ],
+                    "pubkey"     : nostr_pubKey,
+                }
+                var signedEvent = await getSignedEvent( event, nostr_privKey );
+                console.log( 'signedEvent:', signedEvent );
+                socket.send( JSON.stringify( [ "EVENT", signedEvent ] ) );
+            }
+
+            async function getSignedEvent(event, privateKey) {
+                var eventData = JSON.stringify([
+                    0,                    // Reserved for future use
+                    event['pubkey'],        // The sender's public key
+                    event['created_at'],    // Unix timestamp
+                    event['kind'],        // Message “kind” or type
+                    event['tags'],        // Tags identify replies/recipients
+                    event['content']        // Your note contents
+                ])
+                event.id  = sha256( eventData ).toString( 'hex' );
+                event.sig = await schnorr.sign( event.id, privateKey );
+                return event;
+            }
+            function hexToBytes( hex ) {
+                return Uint8Array.from( hex.match( /.{1,2}/g ).map( ( byte ) => parseInt( byte, 16 ) ) );
+            }
+
+            function bytesToHex( bytes ) {
+                return bytes.reduce( ( str, byte ) => str + byte.toString( 16 ).padStart( 2, '0' ), '' );
+            }
+            function base64ToHex( str ) {
+                var raw = atob( str );
+                var result = '';
+                var i; for ( i=0; i<raw.length; i++ ) {
+                    var hex = raw.charCodeAt( i ).toString( 16 );
+                    result += ( hex.length === 2 ? hex : '0' + hex );
+                }
+                return result;
+            }
+            function encrypt( privkey, pubkey, text ) {
+                var key = nobleSecp256k1.getSharedSecret( privkey, '02' + pubkey, true ).substring( 2 );
+                var iv = window.crypto.getRandomValues( new Uint8Array( 16 ) );
+                var cipher = browserifyCipher.createCipheriv( 'aes-256-cbc', hexToBytes( key ), iv );
+                var encryptedMessage = cipher.update(text,"utf8","base64");
+                emsg = encryptedMessage + cipher.final( "base64" );
+                var uint8View = new Uint8Array( iv.buffer );
+                var decoder = new TextDecoder();
+                return emsg + "?iv=" + btoa( String.fromCharCode.apply( null, uint8View ) );
+            }
+            function decrypt( privkey, pubkey, ciphertext ) {
+                var [ emsg, iv ] = ciphertext.split( "?iv=" );
+                var key = nobleSecp256k1.getSharedSecret( privkey, '02' + pubkey, true ).substring( 2 );
+                var decipher = browserifyCipher.createDecipheriv(
+                    'aes-256-cbc',
+                    hexToBytes( key ),
+                    hexToBytes( base64ToHex( iv ) )
+                );
+                var decryptedMessage = decipher.update( emsg, "base64" );
+                dmsg = decryptedMessage + decipher.final( "utf8" );
+                return dmsg;
+            }
+        </script>
+        <script>
+            function getBitcoinPrice() {
+              return new Promise( function( resolve, reject ) {
+                var xhttp = new XMLHttpRequest();
+                  xhttp.onreadystatechange = function() {
+                    if ( this.readyState == 4 && this.status == 200 ) {
+                    var json = JSON.parse( xhttp.responseText );
+                    var price = json[ "data" ][ "amount" ];
+                    resolve( price );
+                  }
+                };
+                xhttp.open( "GET", "https://api.coinbase.com/v2/prices/BTC-USD/spot", true );
+                xhttp.send();
+              });
+            }
+        </script>
+        <script>
+            async function doBackgroundTasks() {
+                checkHeartbeat();
+                sessionStorage[ "bitcoin_price" ] = await getBitcoinPrice();
+                setTimeout( function() {doBackgroundTasks();}, 10000 );
+            }
+            doBackgroundTasks();
+        </script>
+        <script>
+            function isValidJson( content ) {
+                    try {  
+                        var json = JSON.parse( content );
+                    } catch ( e ) {
+                        return false;  
+                    }
+                    return true;
+            }
+        </script>
+        <script>
+            function prepareTx( txid, txindex, amount, myaddress, privkey, timestamp, contributorkey, oracle_hash, creatorkey ) {
+                var original_quantity_of_sats = amount;
+                var total_fee = 500;
+                var new_quantity_of_sats = amount - total_fee;
+                var witnessscript = generateFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey );
+                console.log( "witnessscript:", witnessscript.toString( "hex" ) );
+                var p2wsh = bitcoinjs.payments.p2wsh({ redeem: { output: witnessscript, network: bitcoinjs.networks.mainnet }, network: bitcoinjs.networks.mainnet });
+                console.log( "these are the same, right?", '0020' + bitcoinjs.crypto.sha256( witnessscript ).toString('hex').toString( 'hex' ), '0020' + bitcoinjs.crypto.sha256( buffer.Buffer.from( witnessscript, 'hex' ) ).toString( 'hex' ), '0020' + bitcoinjs.crypto.sha256( p2wsh.output ).toString( 'hex' ), 'hex' );
+                var outputscript = "00" + bitcoinjs.crypto.sha256( witnessscript ).toString( 'hex' );
+                var psbt = new bitcoinjs.Psbt({ network: bitcoinjs.networks.mainnet });
+                psbt.setLocktime( timestamp );
+                psbt
+                .addInput({
+                    hash: txid,
+                    index: txindex,
+                    sequence: 0xfffffffd,
+                    witnessScript: p2wsh.redeem.output,
+                    witnessUtxo: {
+                        script: buffer.Buffer.from( '0020' + bitcoinjs.crypto.sha256( buffer.Buffer.from( witnessscript, 'hex' ) ).toString( 'hex' ), 'hex' ),
+                        value: original_quantity_of_sats
+                    },
+                });
+                psbt.addOutput({
+                    address: myaddress,
+                    value: new_quantity_of_sats,
+                });
+                psbt.signInput( 0, bitcoinjs.ECPair.fromPrivateKey( buffer.Buffer.from( privkey, "hex" ) ) );
+                var getFinalScripts = ( txindex, input, script ) => {
+                    //Step 1: Check to make sure the meaningful locking script matches what you expect.
+                    var decompiled = bitcoinjs.script.decompile( script );
+                    if ( !decompiled ) {
+                        throw new Error( `Can not finalize input #${txindex}` );
+                    }
+                    //Step 2: Create final scripts
+                    var stack_elements = [];
+                    stack_elements.push( input.partialSig[ 0 ].signature );
+                    stack_elements.push( bitcoinjs.script.OPS.OP_1 );
+                    var witnessStack = bitcoinjs.payments.p2wsh({
+                        redeem: {
+                            output: script,
+                            input: bitcoinjs.script.compile( stack_elements ),
+                        }
+                    });
+                    return {
+                        finalScriptWitness: witnessStackToScriptWitness( witnessStack.witness )
+                    }
+                }
+                psbt.finalizeInput( 0, getFinalScripts );
+                return psbt.extractTransaction().toHex();
+            }
+        </script>
+        <script>
+            function createQR( content ) {
+                var dataUriPngImage = document.createElement( "img" ),
+                s = QRCode.generatePNG( content, {
+                    ecclevel: 'M',
+                    format: 'html',
+                    fillcolor: '#FFFFFF',
+                    textcolor: '#000000',
+                    margin: 4,
+                    modulesize: 8,
+                });
+                dataUriPngImage.src = s;
+                dataUriPngImage.id = "qr_code";
+                return dataUriPngImage;
+            }
+        </script>
+        <script>
+            function witnessStackToScriptWitness(witness) {
+              let buffer2 = buffer.Buffer.allocUnsafe(0);
+              function writeSlice(slice) {
+                buffer2 = buffer.Buffer.concat([buffer2, buffer.Buffer.from(slice)]);
+              }
+              function writeVarInt(i) {
+                const currentLen = buffer2.length;
+                const varintLen = varuintBitcoin.encodingLength(i);
+                buffer2 = buffer.Buffer.concat([buffer2, buffer.Buffer.allocUnsafe(varintLen)]);
+                varuintBitcoin.encode(i, buffer2, currentLen);
+              }
+              function writeVarSlice(slice) {
+                writeVarInt(slice.length);
+                writeSlice(slice);
+              }
+              function writeVector(vector) {
+                writeVarInt(vector.length);
+                vector.forEach(writeVarSlice);
+              }
+              writeVector(witness);
+              return buffer2;
+            }
+        </script>
+        <script>
+            async function showQR( message ) {
+                if ( !document.getElementById( "address" ).value ) {
+                    alert( "please try again and remember to add a bitcoin address" );
+                    return;
+                }
+                sessionStorage[ "refund_address" ] = document.getElementById( "address" ).value;
+                var a = document.createElement( "a" );
+                a.href = "bitcoin:" + message.toLowerCase();
+                a.target = "_blank";
+                a.append( createQR( message.toUpperCase() ) );
+                document.getElementById( "modal" ).innerHTML = "";
+                document.getElementById( "modal" ).append( a );
+                document.getElementById( "modal" ).innerHTML += `<div align="center" style="overflow-wrap: break-word; margin-bottom: 20px; font-size: .8em;">${ message }</div>`;
+                document.getElementById( "modal" ).innerHTML += '<div align="center" style="font-weight: bold;">click or scan</div>';
+                document.getElementById( "black-bg" ).style.display = "block";
+                document.getElementById( "modal" ).style.display = "block";
+                var moneyArrived = await waitForMoneyToArriveInAddress( message );
+                if ( moneyArrived ) {
+                    var txid = await getIdOfTxThatSentMoneyToAddress( message );
+                    var url = "https://mempool.space/api/tx/" + txid;
+                    var tx = await getData( url );
+                    var tx = JSON.parse( tx );
+                    var txindex = 202020202020202020;
+                    var amount = 0;
+                    tx[ "vout" ].forEach( function( vout, index ) {
+                        if ( vout[ "scriptpubkey_address" ] == message ) {
+                            txindex = index;
+                        }
+                    });
+                    if ( txindex == 202020202020202020 ) {
+                        alert( "nice try but this transaction did not deposit money into the fundraiser!" );
+                        window.location.reload();
+                        return;
+                    }
+                    amount = tx[ "vout" ][ txindex ][ "value" ];
+                }
+                console.log( "tx info:", txid, txindex, amount );
+                txsubmit( txid, txindex, amount );
+            }
+        </script>
+        <script>
+            async function getIdOfTxThatSentMoneyToAddress( address ) {
+                return new Promise( function( resolve, reject ) {
+                    var xhttp = new XMLHttpRequest();
+                    xhttp.onreadystatechange = function() {
+                        if ( this.readyState == 4 && ( this.status > 199 && this.status < 300 ) ) {
+                            var json = JSON.parse( xhttp.responseText );
+                            json.reverse();
+                            var counter = 0;
+                            json.forEach( function( tx ) {
+                                tx[ "vout" ].forEach( function( vout ) {
+                                    if ( counter == 0 ) {
+                                        if ( "scriptpubkey_address" in vout && vout[ "scriptpubkey_address" ] == address ) {
+                                            resolve( tx[ "txid" ] );
+                                            counter = counter + 1;
+                                        }
+                                    }
+                                });
+                            });
+                            resolve( "none" );
+                        }
+                    };
+                    xhttp.open( "GET", "https://mempool.space/api/address/" + address + "/txs", true );
+                    xhttp.send();
+                });
+            }
+            //this function returns true if the address received money or false if it did not
+            function addressOnceHadMoney( address ) {
+                return new Promise( function( resolve, reject ) {
+                    var xhttp = new XMLHttpRequest();
+                    xhttp.onreadystatechange = function() {
+                        if ( this.readyState == 4 && ( this.status > 199 && this.status < 300 ) ) {
+                            var json = JSON.parse( xhttp.responseText );
+                            if ( json[ "chain_stats" ][ "funded_txo_count" ] > 0 || json[ "mempool_stats" ][ "funded_txo_count" ] > 0 ) {
+                                resolve( true );
+                            }
+                            resolve( false );
+                        }
+                    };
+                    xhttp.open( "GET", "https://mempool.space/api/address/" + address, true );
+                    xhttp.send();
+                });
+            }
+            //this function waits until money arrives in an address, checking every five seconds, and then returns true -- it never returns false but it can hang forever
+            async function waitForMoneyToArriveInAddress( address ) {
+                async function isAddressFundedYet( address ) {
+                    var address_received_money = await addressOnceHadMoney( address );
+                    return new Promise( function( resolve, reject ) {
+                        if ( !address_received_money ) {
+                            setTimeout( async function() {
+                                var msg = await isAddressFundedYet( address );
+                                resolve( msg );
+                            }, 5000 );
+                        } else {
+                            resolve( address_received_money );
+                        }
+                    });
+                }
+                async function getTimeoutData() {
+                    var address_received_money = await isAddressFundedYet( address );
+                    return address_received_money;
+                }
+                var returnable = await getTimeoutData();
+                return returnable;
+            }
+        </script>
+        <script>
+            function txsubmit( txid, txindex, amount ) {
+                txindex = Number( txindex );
+                amount = Number( amount );
+                var fundraiser_pubkey = sessionStorage[ "creator" ];
+                var message = {}
+                message[ "type" ] = "funding info";
+                var content = {}
+                content[ "pubkey" ] = sessionStorage[ "pubkey" ];
+                content[ "txid" ] = txid;
+                content[ "txindex" ] = txindex;
+                message[ "content" ] = content;
+                console.log( message );
+                sendFundingInfo( JSON.stringify( message ), fundraiser_pubkey );
+                modalVanish();
+                var myaddress = sessionStorage[ "refund_address" ];
+                var privkey = sessionStorage[ "privkey" ];
+                var timestamp = Number( sessionStorage[ "timestamp" ] );
+                var contributorkey = sessionStorage[ "pubkey" ];
+                var oracle_hash = sessionStorage[ "oracle_hash" ];
+                var creatorkey = sessionStorage[ "creatorkey" ];
+                console.log( "txinfo:", txid, txindex, amount, myaddress, privkey, timestamp, contributorkey, oracle_hash, creatorkey );
+                var tx = prepareTx( txid, txindex, amount, myaddress, privkey, timestamp, contributorkey, oracle_hash, creatorkey );
+                var message_for_watchtower = `{"type":"watch","tx":"${tx}","time":${timestamp}}`;
+                sendDM( message_for_watchtower, trusted_oracles[ 0 ].substring( 2 ) );
+                console.log( "tx:", tx );
+                console.log( `prepareTx( "${txid}", ${txindex}, ${amount}, "${myaddress}", "${privkey}", ${timestamp}, "${contributorkey}", "${oracle_hash}", "${creatorkey}" )` );
+                var url = window.location.href.substring( 0, window.location.href.indexOf( "contribute.htm" ) ) + "redemption.html";
+                var redemption_file = {}
+                redemption_file[ "type" ] = "contributor";
+                var redemption_content = {}
+                redemption_content[ "privkey" ] = privkey;
+                redemption_content[ "tx" ] = tx;
+                redemption_content[ "pubkey" ] = contributorkey;
+                redemption_content[ "creator_pubkey" ] = creatorkey;
+                redemption_content[ "oracle_hash" ] = oracle_hash;
+                redemption_content[ "timestamp" ] = timestamp;
+                redemption_content[ "redemption_url" ] = url;
+                redemption_file[ "content" ] = redemption_content;
+                saveData( JSON.stringify( redemption_file ), "redemption_file.json" );
+                var url = window.location.href.substring( 0, window.location.href.indexOf( "contribute.htm" ) ) + "redemption.html";
+                var alert = `A file called redemption_file.json was just downloaded on your computer. This file contains all of the information you need to recover your money if the fundraiser does not raise the right amount. Just wait til the fundraiser has been over for 24 hours and then visit this link to redeem your money: <a href="${url}" target="_blank">${url}</a> -- note that you may need to upload the file you just downloaded to that page so keep that file. Your oracle also has a copy of your refund transaction and will try to broadcast it for you if the fundraiser doesn't meet its goal, so you might see your money arrive in your bitcoin wallet without even going to that web page, but if the oracle goes down for some reason this file will let you recover your money without them.`;
+                document.getElementById( "modal" ).innerHTML = "";
+                document.getElementById( "modal" ).innerHTML += `<div align="center" style="overflow-wrap: break-word; margin-bottom: 20px; font-size: .8em;">${ alert }</div>`;
+                document.getElementById( "black-bg" ).style.display = "block";
+                document.getElementById( "modal" ).style.display = "block";
+            }
+        </script>
+        <script>
+            function saveData( data, fileName ) {
+                var a = document.createElement("a");
+                document.body.appendChild(a);
+                a.style = "display: none";
+                var blob = new Blob([data], {type: "octet/stream"}),
+                    url = window.URL.createObjectURL(blob);
+                a.href = url;
+                a.download = fileName;
+                a.click();
+                window.URL.revokeObjectURL(url);
+            }
+        </script>
+        <script>
+            function modalVanish() {
+                document.getElementById( "black-bg" ).style.display = "none";
+                document.getElementById( "modal" ).style.display = "none";
+            }
+        </script>
+        <script>
+            function getData( url ) {
+                return new Promise( function( resolve, reject ) {
+                    var xhttp = new XMLHttpRequest();
+                    xhttp.onreadystatechange = function() {
+                        if ( this.readyState == 4 && ( this.status > 199 && this.status < 300 ) ) {
+                            resolve( xhttp.responseText );
+                        };
+                    }
+                    xhttp.open( "GET", url, true );
+                    xhttp.send();
+                });
+            }
+        </script>
+        <script>
+            function satsToBitcoin( sats ) {
+                return "0." + String( sats ).padStart( 8, "0" );
+            }
+        </script>
+        <div id="black-bg" onclick="modalVanish();"></div>
+        <div id="modal"></div>
+    </div>
+</body>
+</html>
