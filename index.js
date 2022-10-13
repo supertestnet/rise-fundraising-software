@@ -28,6 +28,7 @@ console.log( "nostr pubkey:", pubKeyMinus2 );
 console.log( "signing pubkey:", signing_pubkey );
 var randomid = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
 var randomid2 = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
+var randomid3 = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
 
 var raised_array = {}
 var bitcoin_price = 0;
@@ -284,7 +285,7 @@ async function setPublicNote( note ) {
         return returnable;
 }
 
-async function handlePrivateMessages() {
+async function handlePrivateMessages( subscription_id ) {
         var relay = "wss://relay.damus.io";
         relay = normalizeRelayURL( relay );
         var socket = new WebSocket( relay );
@@ -317,17 +318,37 @@ async function handlePrivateMessages() {
         });
         socket.on( 'open', function open() {
                 console.log( "connected" );
+                function checkHeartbeat( socket ) {
+                    console.log( "socket state:", socket.readyState );
+                    heartbeat = false;
+                    var heartbeatsubId   = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
+                    var heartbeatfilter  = { "ids": [ "41ce9bc50da77dda5542f020370ecc2b056d8f2be93c1cedf1bf57efcab095b0" ] }
+                    var heartbeatsub     = [ "REQ", heartbeatsubId, heartbeatfilter ];
+                    if ( socket && socket.readyState != 0 ) {
+
+                            console.log( "getting branle msg" );
+                            socket.send( JSON.stringify( heartbeatsub ) );
+                    }
+                    setTimeout( function() {
+                            if ( !heartbeat && socket.readyState == 3 ) {
+                                    var relay = "wss://relay.damus.io";
+                                    socket = new WebSocket( relay );
+                            }
+                    }, 2000 );
+                    setTimeout( function() {checkHeartbeat( socket );}, 5000 );
+                }
+                checkHeartbeat( socket );
                 var filter = {
                         "#p": [
                                 pubKeyMinus2
                         ],
                         "since": Math.floor( Date.now() / 1000 ) - ( 60 * 5 )
                 }
-                var subscription = [ "REQ", randomid2, filter ];
+                var subscription = [ "REQ", subscription_id, filter ];
                 subscription = JSON.stringify( subscription );
                 socket.send( subscription );
         });
-        checkHeartbeat( socket );
+        doBackgroundTasks();
 }
 
 async function handlePublicMessages( pubkey, subscription_id, oracle_hash, creatorkey, goal, timestamp ) {
@@ -491,32 +512,12 @@ function watchTower() {
         }
 }
 
-async function checkHeartbeat( socket ) {
-        console.log( "checking heartbeat" );
-        heartbeat = false;
-        var heartbeatsubId   = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
-        var heartbeatfilter  = { "ids": [ "41ce9bc50da77dda5542f020370ecc2b056d8f2be93c1cedf1bf57efcab095b0" ] }
-        var heartbeatsub     = [ "REQ", heartbeatsubId, heartbeatfilter ];
-        if ( socket && socket.readyState != 0 ) {
-                socket.send( JSON.stringify( heartbeatsub ) );
-        }
-        setTimeout( function() {
-                var closer = [ "CLOSE", heartbeatsubId ];
-                if ( socket && socket.readyState != 0 ) {
-                        socket.send( JSON.stringify( closer ) );
-                }
-        }, 1500 );
-        setTimeout( function() {
-                if ( !heartbeat && socket.readyState == 3 ) {
-                        var relay = "wss://relay.damus.io";
-                        socket = new WebSocket( relay );
-                }
-        }, 2000 );
+async function doBackgroundTasks() {
         clearArray();
         bitcoin_price = await getBitcoinPrice();
         console.log( "price:", bitcoin_price );
         watchTower();
-        setTimeout( function() {checkHeartbeat( socket );}, 5000 );
+        setTimeout( function() {doBackgroundTasks();}, 5000 );
 }
 
     function generateFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey ) {
@@ -596,4 +597,4 @@ function waitSomeSeconds( num ) {
         });
 }
 
-handlePrivateMessages();
+handlePrivateMessages( randomid3 );
