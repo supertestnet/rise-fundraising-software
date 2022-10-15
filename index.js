@@ -27,8 +27,6 @@ var signing_pubkey = nobleSecp256k1.getPublicKey( privKey, true );
 console.log( "nostr pubkey:", pubKeyMinus2 );
 console.log( "signing pubkey:", signing_pubkey );
 var randomid = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
-var randomid2 = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
-var randomid3 = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
 
 var raised_array = {}
 var bitcoin_price = 0;
@@ -285,37 +283,40 @@ async function setPublicNote( note ) {
         return returnable;
 }
 
-async function handlePrivateMessages( subscription_id ) {
-        var relay = "wss://relay.damus.io";
-        relay = normalizeRelayURL( relay );
-        var socket = new WebSocket( relay );
-        socket.on( 'message', async function( event ) {
-                var event = JSON.parse( event );
-                if ( event[ 2 ] ) {
-                        console.log( event[ 2 ].content, "kind:", event[ 2 ].kind );
-                }
-                if ( event[ 2 ] && ( event[ 2 ].kind == 4 || event[ 2 ].kind == 20004 ) ) {
+async function handleMessage( event ) {
+        var event = JSON.parse( event );
+        if ( event[ 2 ] ) {
+                console.log( event[ 2 ].content, "kind:", event[ 2 ].kind );
+        }
+        if ( event[ 2 ] && ( event[ 2 ].kind == 4 || event[ 2 ].kind == 20004 ) ) {
+                //console.log( "tags length:", event[ 2 ].tags.length );
+                var i; for ( i=0; i<event[ 2 ].tags.length; i++ ) {
                         //console.log( "tags length:", event[ 2 ].tags.length );
-                        var i; for ( i=0; i<event[ 2 ].tags.length; i++ ) {
-                                //console.log( "tags length:", event[ 2 ].tags.length );
-                                if ( event[ 2 ].tags[ i ] && event[ 2 ].tags[ i ][ 1 ] ) {
-                                        var recipient = event[ 2 ].tags[ i ][ 1 ];
-                                        console.log( "recipient:", recipient, "my key:", pubKeyMinus2 );
-                                        if ( recipient == pubKeyMinus2 ) {
-                                                var decrypted_message = decrypt( privKey, event[ 2 ].pubkey, event[ 2 ].content );
-                                                var note = ( decrypted_message );
-                                                console.log( note );
-                                                var reply = await handleNote( note, event[ 2 ].pubkey );
-                                                console.log( reply );
-                                                if ( reply ) {
-                                                        var id = await sendDM( JSON.stringify( reply ), event[ 2 ].pubkey );
-                                                        console.log( id );
-                                                }
+                        if ( event[ 2 ].tags[ i ] && event[ 2 ].tags[ i ][ 1 ] ) {
+                                var recipient = event[ 2 ].tags[ i ][ 1 ];
+                                console.log( "recipient:", recipient, "my key:", pubKeyMinus2 );
+                                if ( recipient == pubKeyMinus2 ) {
+                                        var decrypted_message = decrypt( privKey, event[ 2 ].pubkey, event[ 2 ].content );
+                                        var note = ( decrypted_message );
+                                        console.log( note );
+                                        var reply = await handleNote( note, event[ 2 ].pubkey );
+                                        console.log( reply );
+                                        if ( reply ) {
+                                                var id = await sendDM( JSON.stringify( reply ), event[ 2 ].pubkey );
+                                                console.log( id );
                                         }
                                 }
                         }
                 }
-        });
+        }
+}
+
+async function handlePrivateMessages( subscription_id ) {
+        var relay = "wss://relay.damus.io";
+        relay = normalizeRelayURL( relay );
+        var socket = new WebSocket( relay );
+        //socket.on( 'message', handleMessage );
+        socket.on( 'message', handleMessage );
         socket.on( 'open', function open() {
                 console.log( "connected" );
                 function checkHeartbeat( socket ) {
@@ -325,14 +326,26 @@ async function handlePrivateMessages( subscription_id ) {
                     var heartbeatfilter  = { "ids": [ "41ce9bc50da77dda5542f020370ecc2b056d8f2be93c1cedf1bf57efcab095b0" ] }
                     var heartbeatsub     = [ "REQ", heartbeatsubId, heartbeatfilter ];
                     if ( socket && socket.readyState != 0 ) {
-
                             console.log( "getting branle msg" );
                             socket.send( JSON.stringify( heartbeatsub ) );
                     }
                     setTimeout( function() {
-                            if ( !heartbeat && socket.readyState == 3 ) {
+                            if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
+                                    socket.removeEventListener( 'message', handleMessage );
                                     var relay = "wss://relay.damus.io";
                                     socket = new WebSocket( relay );
+                                    socket.on( 'message', handleMessage );
+                                    var filter = {
+                                            "#p": [
+                                                    pubKeyMinus2
+                                            ],
+                                            "since": Math.floor( Date.now() / 1000 ) - ( 60 * 5 )
+                                    }
+                                    var newid = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
+                                    var subscription = [ "REQ", newid, filter ];
+                                    //var subscription = [ "REQ", subscription_id, filter ];
+                                    subscription = JSON.stringify( subscription );
+                                    socket.send( subscription );
                             }
                     }, 2000 );
                     setTimeout( function() {checkHeartbeat( socket );}, 5000 );
@@ -344,7 +357,9 @@ async function handlePrivateMessages( subscription_id ) {
                         ],
                         "since": Math.floor( Date.now() / 1000 ) - ( 60 * 5 )
                 }
-                var subscription = [ "REQ", subscription_id, filter ];
+                var newid = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
+                var subscription = [ "REQ", newid, filter ];
+                //var subscription = [ "REQ", subscription_id, filter ];
                 subscription = JSON.stringify( subscription );
                 socket.send( subscription );
         });
@@ -513,6 +528,7 @@ function watchTower() {
 }
 
 async function doBackgroundTasks() {
+        //console.log( "socket state:", socket.readyState );
         clearArray();
         bitcoin_price = await getBitcoinPrice();
         console.log( "price:", bitcoin_price );
@@ -597,4 +613,4 @@ function waitSomeSeconds( num ) {
         });
 }
 
-handlePrivateMessages( randomid3 );
+handlePrivateMessages();
