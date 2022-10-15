@@ -311,58 +311,49 @@ async function handleMessage( event ) {
         }
 }
 
-async function handlePrivateMessages( subscription_id ) {
+function openConnection( socket ) {
+        console.log( "connected" );
+        function checkHeartbeat( socket ) {
+            console.log( "socket state:", socket.readyState );
+            heartbeat = false;
+            var heartbeatsubId   = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
+            var heartbeatfilter  = { "ids": [ "41ce9bc50da77dda5542f020370ecc2b056d8f2be93c1cedf1bf57efcab095b0" ] }
+            var heartbeatsub     = [ "REQ", heartbeatsubId, heartbeatfilter ];
+            if ( socket && socket.readyState != 0 ) {
+                    console.log( "getting branle msg" );
+                    socket.send( JSON.stringify( heartbeatsub ) );
+            }
+            setTimeout( function() {
+                    if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
+                            socket.removeEventListener( 'message', handleMessage );
+                            socket.removeEventListener( 'open', openConnection( socket ) );
+                            var relay = "wss://relay.damus.io";
+                            socket = new WebSocket( relay );
+                            socket.on( 'message', handleMessage );
+                            socket.on( 'open', openConnection( socket ) );
+                    }
+            }, 2000 );
+            setTimeout( function() {checkHeartbeat( socket );}, 5000 );
+        }
+        checkHeartbeat( socket );
+        var filter = {
+                "#p": [
+                        pubKeyMinus2
+                ],
+                "since": Math.floor( Date.now() / 1000 ) - ( 60 * 5 )
+        }
+        var newid = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
+        var subscription = [ "REQ", newid, filter ];
+        subscription = JSON.stringify( subscription );
+        socket.send( subscription );
+}
+
+async function handlePrivateMessages() {
         var relay = "wss://relay.damus.io";
         relay = normalizeRelayURL( relay );
         var socket = new WebSocket( relay );
-        //socket.on( 'message', handleMessage );
         socket.on( 'message', handleMessage );
-        socket.on( 'open', function open() {
-                console.log( "connected" );
-                function checkHeartbeat( socket ) {
-                    console.log( "socket state:", socket.readyState );
-                    heartbeat = false;
-                    var heartbeatsubId   = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
-                    var heartbeatfilter  = { "ids": [ "41ce9bc50da77dda5542f020370ecc2b056d8f2be93c1cedf1bf57efcab095b0" ] }
-                    var heartbeatsub     = [ "REQ", heartbeatsubId, heartbeatfilter ];
-                    if ( socket && socket.readyState != 0 ) {
-                            console.log( "getting branle msg" );
-                            socket.send( JSON.stringify( heartbeatsub ) );
-                    }
-                    setTimeout( function() {
-                            if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
-                                    socket.removeEventListener( 'message', handleMessage );
-                                    var relay = "wss://relay.damus.io";
-                                    socket = new WebSocket( relay );
-                                    socket.on( 'message', handleMessage );
-                                    var filter = {
-                                            "#p": [
-                                                    pubKeyMinus2
-                                            ],
-                                            "since": Math.floor( Date.now() / 1000 ) - ( 60 * 5 )
-                                    }
-                                    var newid = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
-                                    var subscription = [ "REQ", newid, filter ];
-                                    //var subscription = [ "REQ", subscription_id, filter ];
-                                    subscription = JSON.stringify( subscription );
-                                    socket.send( subscription );
-                            }
-                    }, 2000 );
-                    setTimeout( function() {checkHeartbeat( socket );}, 5000 );
-                }
-                checkHeartbeat( socket );
-                var filter = {
-                        "#p": [
-                                pubKeyMinus2
-                        ],
-                        "since": Math.floor( Date.now() / 1000 ) - ( 60 * 5 )
-                }
-                var newid = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
-                var subscription = [ "REQ", newid, filter ];
-                //var subscription = [ "REQ", subscription_id, filter ];
-                subscription = JSON.stringify( subscription );
-                socket.send( subscription );
-        });
+        socket.on( 'open', function() {openConnection( socket );} );
         doBackgroundTasks();
 }
 
