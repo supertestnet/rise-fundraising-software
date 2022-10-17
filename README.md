@@ -20,13 +20,7 @@ Yes, this software is in the public domain, so you can use it without restrictio
 If you decide to install this on your website, you'll need nodejs and npm installed. My nodejs version is v16.17.0 and my npm version is 8.15.0. Then clone this repo, go in, and run `npm init` -- hit enter a bunch of times while it prepares your environment, then install these dependencies:
 
 ```
-npm install ws
-npm install browserify-cipher
-npm install noble-secp256k1
-npm install bitcoinjs-lib
-npm install axios
-npm install crypto
-npm install fs
+npm install ws browserify-cipher noble-secp256k1 bitcoinjs-lib axios crypto fs
 ```
 
 Now run `node index.js` and you should be good to go. Your private keys are in a file it created called keys.txt in case you want to back those up. Don't delete that file, your private keys are used throughout the app and they are pulled from that file. The app should spit out a nostr pubkey and a signing pubkey in your terminal. Copy those keys and add them to redemption.html -- replace the keys I put in for my instance on lines 425 and 426. Do the same thing on lines 140 and 141 of create.html. Then take just the signing key, go into contribute.html, and replace my key with yours on line 315. Great! Now you are your own oracle. Have fun!
