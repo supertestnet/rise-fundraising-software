@@ -285,9 +285,6 @@ async function setPublicNote( note ) {
 
 async function handleMessage( event ) {
         var event = JSON.parse( event );
-        if ( event[ 2 ] ) {
-                console.log( event[ 2 ].content, "kind:", event[ 2 ].kind );
-        }
         if ( event[ 2 ] && ( event[ 2 ].kind == 4 || event[ 2 ].kind == 20004 ) ) {
                 //console.log( "tags length:", event[ 2 ].tags.length );
                 var i; for ( i=0; i<event[ 2 ].tags.length; i++ ) {
@@ -314,23 +311,21 @@ async function handleMessage( event ) {
 function openConnection( socket ) {
         console.log( "connected" );
         function checkHeartbeat( socket ) {
-            console.log( "socket state:", socket.readyState );
             heartbeat = false;
             var heartbeatsubId   = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
             var heartbeatfilter  = { "ids": [ "41ce9bc50da77dda5542f020370ecc2b056d8f2be93c1cedf1bf57efcab095b0" ] }
             var heartbeatsub     = [ "REQ", heartbeatsubId, heartbeatfilter ];
             if ( socket && socket.readyState != 0 ) {
-                    console.log( "getting branle msg" );
                     socket.send( JSON.stringify( heartbeatsub ) );
             }
             setTimeout( function() {
                     if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
                             socket.removeEventListener( 'message', handleMessage );
-                            socket.removeEventListener( 'open', openConnection( socket ) );
+                            socket.removeEventListener( 'open', function() {openConnection( socket );} );
                             var relay = "wss://relay.damus.io";
                             socket = new WebSocket( relay );
                             socket.on( 'message', handleMessage );
-                            socket.on( 'open', openConnection( socket ) );
+                            socket.on( 'open', function() {openConnection( socket );} );
                     }
             }, 2000 );
             setTimeout( function() {checkHeartbeat( socket );}, 5000 );
@@ -354,7 +349,7 @@ async function handlePrivateMessages() {
         var socket = new WebSocket( relay );
         socket.on( 'message', handleMessage );
         socket.on( 'open', function() {openConnection( socket );} );
-        doBackgroundTasks();
+        doBackgroundTasks( 12 );
 }
 
 async function handlePublicMessages( pubkey, subscription_id, oracle_hash, creatorkey, goal, timestamp ) {
@@ -518,13 +513,17 @@ function watchTower() {
         }
 }
 
-async function doBackgroundTasks() {
-        //console.log( "socket state:", socket.readyState );
+async function doBackgroundTasks( i ) {
         clearArray();
-        bitcoin_price = await getBitcoinPrice();
-        console.log( "price:", bitcoin_price );
+        //check bitcoin's price every 60 seconds
+        if ( i == 12 ) {
+                bitcoin_price = await getBitcoinPrice();
+                i = 0;
+        } else {
+                i = i + 1;
+        }
         watchTower();
-        setTimeout( function() {doBackgroundTasks();}, 5000 );
+        setTimeout( function() {doBackgroundTasks( i );}, 5000 );
 }
 
     function generateFundraiserScript( timestamp, contributorkey, oracle_hash, creatorkey ) {
@@ -564,6 +563,8 @@ function getData( url ) {
                 .get( url )
                 .then( res => {
                         resolve( res.data );
+                }).catch( function( error ) {
+                        console.log( error.message );
                 });
         });
 }
@@ -573,7 +574,7 @@ function postData( url, json ) {
                 axios.post( url, json )
                 .then( res => {
                         resolve( res.data );
-                }).catch(function( error ){
+                }).catch( function( error ) {
                         console.log( error.message );
                 });
         });
