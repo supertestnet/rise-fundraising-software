@@ -320,6 +320,7 @@ function openConnection( socket ) {
             }
             setTimeout( function() {
                     if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
+                            socket.terminate();
                             socket.removeEventListener( 'message', handleMessage );
                             socket.removeEventListener( 'open', function() {openConnection( socket );} );
                             var relay = "wss://relay.damus.io";
