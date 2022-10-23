@@ -319,19 +319,15 @@ function openConnection( socket ) {
                     socket.send( JSON.stringify( heartbeatsub ) );
             }
             setTimeout( function() {
-                    try {
-                            if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
-                                    socket.terminate();
-                                    socket.removeEventListener( 'message', handleMessage );
-                                    socket.removeEventListener( 'open', function() {openConnection( socket );} );
-                                    var relay = "wss://relay.damus.io";
-                                    socket = new WebSocket( relay );
-                                    socket.on( 'message', handleMessage );
-                                    socket.on( 'open', function() {openConnection( socket );} );
-                            }
-                    } catch( e ) {
-                        console.log( "server error:", e );
-                        heartbeat = false;
+                    if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
+                            socket.terminate();
+                            socket.removeEventListener( 'message', handleMessage );
+                            socket.removeEventListener( 'open', function() {openConnection( socket );} );
+                            var relay = "wss://relay.damus.io";
+                            socket = new WebSocket( relay );
+                            socket.on( 'error', ( error ) => { console.log( error ); });
+                            socket.on( 'message', handleMessage );
+                            socket.on( 'open', function() {openConnection( socket );} );
                     }
             }, 2000 );
             setTimeout( function() {checkHeartbeat( socket );}, 5000 );
@@ -353,6 +349,7 @@ async function handlePrivateMessages() {
         var relay = "wss://relay.damus.io";
         relay = normalizeRelayURL( relay );
         var socket = new WebSocket( relay );
+        socket.on( 'error', ( error ) => { console.log( error ); });
         socket.on( 'message', handleMessage );
         socket.on( 'open', function() {openConnection( socket );} );
         doBackgroundTasks( 12 );
