@@ -8,6 +8,7 @@ var fs = require( 'fs' );
 
 var privKey = "";
 var secret = "";
+var num_of_sockets = 0;
 
 if ( fs.existsSync( "keys.txt" ) ) {
         var keystext = fs.readFileSync( "keys.txt" ).toString();
@@ -309,7 +310,8 @@ async function handleMessage( event ) {
 }
 
 function openConnection( socket ) {
-        console.log( "connected" );
+        console.log( "connected", new Date() );
+        num_of_sockets = num_of_sockets + 1;
         function checkHeartbeat( socket ) {
             heartbeat = false;
             var heartbeatsubId   = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
@@ -319,7 +321,12 @@ function openConnection( socket ) {
                     socket.send( JSON.stringify( heartbeatsub ) );
             }
             setTimeout( function() {
-                    if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
+                    if ( num_of_sockets > 1 ) {
+                            socket.terminate();
+                            socket.removeEventListener( 'message', handleMessage );
+                            socket.removeEventListener( 'open', function() {openConnection( socket );} );
+                            num_of_sockets = num_of_sockets - 1;
+                    } else if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
                             socket.terminate();
                             socket.removeEventListener( 'message', handleMessage );
                             socket.removeEventListener( 'open', function() {openConnection( socket );} );
