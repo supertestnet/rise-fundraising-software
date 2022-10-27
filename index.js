@@ -323,13 +323,15 @@ function openConnection( socket ) {
             setTimeout( function() {
                     if ( num_of_sockets > 1 ) {
                             socket.terminate();
-                            socket.removeEventListener( 'message', handleMessage );
-                            socket.removeEventListener( 'open', function() {openConnection( socket );} );
+                            socket.removeAllListeners();
+                            //socket.removeEventListener( 'message', handleMessage );
+                            //socket.removeEventListener( 'open', function() {openConnection( socket );} );
                             num_of_sockets = num_of_sockets - 1;
                     } else if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
                             socket.terminate();
-                            socket.removeEventListener( 'message', handleMessage );
-                            socket.removeEventListener( 'open', function() {openConnection( socket );} );
+                            socket.removeAllListeners();
+                            //socket.removeEventListener( 'message', handleMessage );
+                            //socket.removeEventListener( 'open', function() {openConnection( socket );} );
                             var relay = "wss://relay.damus.io";
                             socket = new WebSocket( relay );
                             socket.on( 'error', ( error ) => { console.log( error ); });
