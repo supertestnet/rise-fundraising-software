@@ -9,6 +9,7 @@ var fs = require( 'fs' );
 var privKey = "";
 var secret = "";
 var num_of_sockets = 0;
+var socket_id = "";
 
 if ( fs.existsSync( "keys.txt" ) ) {
         var keystext = fs.readFileSync( "keys.txt" ).toString();
@@ -311,8 +312,7 @@ async function handleMessage( event ) {
 
 function openConnection( socket ) {
         console.log( "connected", new Date() );
-        num_of_sockets = num_of_sockets + 1;
-        function checkHeartbeat( socket ) {
+        function checkHeartbeat( socket, socket_id_to_test ) {
             heartbeat = false;
             var heartbeatsubId   = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
             var heartbeatfilter  = { "ids": [ "41ce9bc50da77dda5542f020370ecc2b056d8f2be93c1cedf1bf57efcab095b0" ] }
@@ -321,12 +321,11 @@ function openConnection( socket ) {
                     socket.send( JSON.stringify( heartbeatsub ) );
             }
             setTimeout( function() {
-                    if ( num_of_sockets > 1 ) {
+                    if ( socket_id_to_test != socket_id ) {
                             socket.terminate();
                             socket.removeAllListeners();
                             //socket.removeEventListener( 'message', handleMessage );
                             //socket.removeEventListener( 'open', function() {openConnection( socket );} );
-                            num_of_sockets = num_of_sockets - 1;
                     } else if ( !heartbeat && ( socket.readyState == 3 || socket.readyState == 0 ) ) {
                             socket.terminate();
                             socket.removeAllListeners();
@@ -334,14 +333,15 @@ function openConnection( socket ) {
                             //socket.removeEventListener( 'open', function() {openConnection( socket );} );
                             var relay = "wss://relay.damus.io";
                             socket = new WebSocket( relay );
+                            socket_id = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
                             socket.on( 'error', ( error ) => { console.log( error ); });
                             socket.on( 'message', handleMessage );
                             socket.on( 'open', function() {openConnection( socket );} );
                     }
             }, 2000 );
-            setTimeout( function() {checkHeartbeat( socket );}, 5000 );
+            setTimeout( function() {checkHeartbeat( socket, socket_id );}, 5000 );
         }
-        checkHeartbeat( socket );
+        checkHeartbeat( socket, socket_id );
         var filter = {
                 "#p": [
                         pubKeyMinus2
@@ -358,6 +358,7 @@ async function handlePrivateMessages() {
         var relay = "wss://relay.damus.io";
         relay = normalizeRelayURL( relay );
         var socket = new WebSocket( relay );
+        socket_id = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
         socket.on( 'error', ( error ) => { console.log( error ); });
         socket.on( 'message', handleMessage );
         socket.on( 'open', function() {openConnection( socket );} );
