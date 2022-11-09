@@ -8,8 +8,8 @@ var fs = require( 'fs' );
 
 var privKey = "";
 var secret = "";
-var num_of_sockets = 0;
 var socket_id = "";
+var num_of_connections = -1;
 
 if ( fs.existsSync( "keys.txt" ) ) {
         var keystext = fs.readFileSync( "keys.txt" ).toString();
@@ -312,6 +312,7 @@ async function handleMessage( event ) {
 
 function openConnection( socket ) {
         console.log( "connected", new Date() );
+        num_of_connections = num_of_connections + 1;
         function checkHeartbeat( socket, socket_id_to_test ) {
             heartbeat = false;
             var heartbeatsubId   = Buffer.from( nobleSecp256k1.utils.randomPrivateKey() ).toString( "hex" );
@@ -339,7 +340,11 @@ function openConnection( socket ) {
                             socket.on( 'open', function() {openConnection( socket );} );
                     }
             }, 2000 );
-            setTimeout( function() {checkHeartbeat( socket, socket_id );}, 5000 );
+            if ( num_of_connections < 1 ) {
+                setTimeout( function() {checkHeartbeat( socket, socket_id );}, 5000 );
+            } else {
+                num_of_connections = num_of_connections - 1;
+            }
         }
         checkHeartbeat( socket, socket_id );
         var filter = {
