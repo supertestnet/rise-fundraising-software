@@ -3,7 +3,9 @@ Rise is crowdfunding software built using bitcoin oracle technology to ensure th
 
 # How does it work?
 
-Create a fundraiser here: [https://supertestnet.github.io/rise-fundraising-software/create.html](https://supertestnet.github.io/rise-fundraising-software/create.html)
+Create a fundraiser here: [https://supertestnet.github.io/rise-fundraising-software/create.html](https://supertestnet.github.io/rise-fundraising-software/create.html) **NOTE: THE LINK NO LONGER WORKS***
+
+*It no longer works because I am no longer running the oracle server. But you can run it yourself! Instructions are below.
 
 You'll get a sharable link where people can contribute and you can watch your money roll in. The addresses created on the fundraising page are non-custodial bitcoin smart contracts. They allow one of two spending paths: one uses two keys, namely, the fundraiser recipient's key and a key from a trusted oracle -- i.e. my server, or someone else's if it's configured to talk to someone else's server. This spending path allows the fundraiser recipient to take the money only if the oracle lets them. The oracle is only supposed to do this if the fundraiser meets its goal. (That's what index.js does -- it checks if the fundraiser met its goal and then reveals a key to the fundraiser recipient so they can take their money.)
 
