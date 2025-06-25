@@ -1,6 +1,9 @@
 # Rise fundraising software
 Rise is crowdfunding software built using bitcoin oracle technology to ensure that contributors get their money back if the fundraising goal is not reached
 
+# Alternative software
+This software works but I stopped running the oracle server so you can only use it if you run the server yourself or find someone else who's running it. However, I figured out a way to do a similar thing *without* needing someone to run an oracle server, so I wrote an alternative fundraising software which works right now, without needing to find someone running a special server. Check it out here: https://github.com/supertestnet/semaphore
+
 # How does it work?
 
 Create a fundraiser here: [https://supertestnet.github.io/rise-fundraising-software/create.html](https://supertestnet.github.io/rise-fundraising-software/create.html) **NOTE: THE LINK NO LONGER WORKS***
